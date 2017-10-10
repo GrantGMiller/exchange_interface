@@ -9,7 +9,7 @@ from base64 import b64encode, b64decode
 import datetime
 import time
 
-DEBUG = True
+DEBUG = False
 if not DEBUG:
     print = lambda *a, **k: None
 
@@ -618,14 +618,6 @@ class Exchange():
                 return (response.read().decode())
         except Exception as e:
             print('_SendHttp Exception:\n', e)
-            for item in dir(e):
-                try:
-                    print('e.{}'.format(item), '=', getattr(e, item))
-                except Exception as e2:
-                    print('e.{}'.format(item), '=', e2)
-            print('e.file.read()=', e.file.read())
-            print('e.fp.read()=', e.fp.read())
-            print('e.info()=', e.info())
             raise e
 
 
