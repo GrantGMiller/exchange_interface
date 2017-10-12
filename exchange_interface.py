@@ -420,7 +420,8 @@ class Exchange():
         for sub_calItem in self._calendarItems.copy():
             endDT = sub_calItem.Get('End')
             if endDT < nowDT:
-                self._calendarItems.remove(sub_calItem)
+                if sub_calItem in self._calendarItems:
+                    self._calendarItems.remove(sub_calItem)
 
         # Remove any old items that have the same ItemId
         itemId = calItem.Get('ItemId')
