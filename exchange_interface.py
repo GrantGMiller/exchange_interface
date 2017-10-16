@@ -75,16 +75,25 @@ class _CalendarItem:
     def AddData(self, key, value):
         self._data[key] = value
 
+    def _CalculateDuration(self):
+        delta = self.Get('End') - self.Get('Start')
+        duration = delta.total_seconds()
+        self.AddData('Duration', duration)
+
     def Get(self, key):
         if key is 'Start':
             return self._startDT
         elif key is 'End':
             return self._endDT
+        elif key is 'Duration':
+            if 'Duration' not in self._data:
+                self._CalculateDuration()
+                return self._data.get(key)
         else:
             return self._data.get(key, None)
 
     def __contains__(self, dt):
-        # Note: isinstance(datetime.datetime, datetime.date) == True
+        # Note: isinstance(datetime.datetime.now(), datetime.date.today()) == True
         # Because the point in time exist in that date
         if isinstance(dt, datetime.datetime):
             if dt >= self._startDT and dt <= self._endDT:
@@ -126,6 +135,7 @@ class _CalendarItem:
 
         return False
 
+
     def __str__(self):
         return '<CalendarItem object: Start={}, End={}, Subject={}, HasAttachements={}>'.format(self.Get('Start'),
                                                                                                 self.Get('End'),
@@ -163,6 +173,7 @@ class _Attachment:
     def SaveToPath(self, path):
         with File(path, mode='wb') as file:
             file.write(self.GetContent())
+
 
 
 class Exchange():
