@@ -88,7 +88,7 @@ class _CalendarItem:
         elif key is 'Duration':
             if 'Duration' not in self._data:
                 self._CalculateDuration()
-                return self._data.get(key)
+                return self._data.get(key, None)
         else:
             return self._data.get(key, None)
 
