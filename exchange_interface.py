@@ -3,20 +3,20 @@ Based on the module created by David Gonzalez (dgonzalez@extron.com)
 Re-worked by Grant Miller (gmiller@extron.com)
 '''
 
-
 import urllib.request, re
 from base64 import b64encode, b64decode
 import datetime
 import time
 
-DEBUG = False
+DEBUG = True
 if not DEBUG:
     print = lambda *a, **k: None
 
 try:
-    from extronlib.system import File
+    from extronlib.system import File, ProgramLog
 except:
     File = open
+    ProgramLog = print
 
 offsetSeconds = time.timezone if (time.localtime().tm_isdst == 0) else time.altzone
 offsetHours = offsetSeconds / 60 / 60 * -1
@@ -103,13 +103,13 @@ class _CalendarItem:
 
         elif isinstance(dt, datetime.date):
             if self._startDT.year == dt.year and \
-                            self._startDT.month == dt.month and \
-                            self._startDT.day == dt.day:
+                    self._startDT.month == dt.month and \
+                    self._startDT.day == dt.day:
                 return True
 
             elif self._endDT.year == dt.year and \
-                            self._endDT.month == dt.month and \
-                            self._endDT.day == dt.day:
+                    self._endDT.month == dt.month and \
+                    self._endDT.day == dt.day:
                 return True
 
             else:
@@ -134,7 +134,6 @@ class _CalendarItem:
                 return False
 
         return False
-
 
     def __str__(self):
         return '<CalendarItem object: Start={}, End={}, Subject={}, HasAttachements={}>'.format(self.Get('Start'),
@@ -175,7 +174,6 @@ class _Attachment:
             file.write(self.GetContent())
 
 
-
 class Exchange():
     # Exchange methods
     def __init__(self,
@@ -187,14 +185,14 @@ class Exchange():
 
         self.httpURL = 'https://{0}/EWS/exchange.asmx'.format(server)
         print('self.httpURL=', self.httpURL)
-        #self.httpURL = 'http://{0}/EWS/exchange.asmx'.format(server) #testing only
+        # self.httpURL = 'http://{0}/EWS/exchange.asmx'.format(server) #testing only
         self.encode = b64encode(bytes('{0}:{1}'.format(username, password), "ascii"))
         self.login = str(self.encode)[2:-1]
         self._impersonation = impersonation
         self.header = {
             'content-type': 'text/xml',
             'authorization': 'Basic {}'.format(self.login)
-            }
+        }
         self._calendarItems = []
 
         self._startOfWeek = None
@@ -213,9 +211,9 @@ class Exchange():
         if emailAddress is None:
             xmlAccount = """<t:RequestServerVersion Version="Exchange2007_SP1" />"""
         else:
-            #replace = '<t:PrincipalName>{0}</t:PrincipalName>'.format(emailAddress)
-            #replace = '<t:SID>{0}</t:SID>'.format(emailAddress)
-            #replace = '<t:PrimarySmtpAddress>{0}</t:PrimarySmtpAddress>'.format(emailAddress)
+            # replace = '<t:PrincipalName>{0}</t:PrincipalName>'.format(emailAddress)
+            # replace = '<t:SID>{0}</t:SID>'.format(emailAddress)
+            # replace = '<t:PrimarySmtpAddress>{0}</t:PrimarySmtpAddress>'.format(emailAddress)
             replace = '<t:SmtpAddress>{0}</t:SmtpAddress>'.format(emailAddress)
 
             xmlAccount = """<t:RequestServerVersion Version="Exchange2007_SP1" />
@@ -289,7 +287,7 @@ class Exchange():
                 </m:ParentFolderIds>
                 '''.format(self._folderID, self._changeKey)
 
-        elif emailRegex.search(calendar) is not None: #email address
+        elif emailRegex.search(calendar) is not None:  # email address
             print('emailRegex')
             parentFolder = '''
                 <m:ParentFolderIds>
@@ -300,7 +298,7 @@ class Exchange():
                     </t:DistinguishedFolderId>
                   </m:ParentFolderIds>
                 '''.format(calendar)
-        else: #name
+        else:  # name
             print('name')
             parentFolder = '''
                 <m:ParentFolderIds>
@@ -311,7 +309,6 @@ class Exchange():
                     </t:DistinguishedFolderId>
                   </m:ParentFolderIds>
                 '''.format(calendar)
-
 
         xmlbody = """<?xml version="1.0" encoding="utf-8"?>
                     <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -339,7 +336,7 @@ class Exchange():
                         </m:FindItem>
                       </soap:Body>
                     </soap:Envelope>
-                    """.format(self._soapHeader, self._startOfWeek, self._endOfWeek, parentFolder )
+                    """.format(self._soapHeader, self._startOfWeek, self._endOfWeek, parentFolder)
 
         # """<?xml version="1.0" encoding="utf-8"?>
         #                     <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -470,7 +467,8 @@ class Exchange():
                           </m:Items>
                         </m:CreateItem>
                       </soap:Body>
-                    </soap:Envelope>""".format(self._soapHeader, subject, body, startTimeString, endTimeString, time.tzname[0])
+                    </soap:Envelope>""".format(self._soapHeader, subject, body, startTimeString, endTimeString,
+                                               time.tzname[0])
 
         self._SendHttp(xmlBody)
 
@@ -574,7 +572,7 @@ class Exchange():
         responseCode = regExReponse.search(request).group(1)
         if responseCode == 'NoError':  # Handle errors sent by the server
             itemName = regExName.search(request).group(1)
-            itemName = itemName.replace(' ','_') #remove ' ' chars because dont work on linux
+            itemName = itemName.replace(' ', '_')  # remove ' ' chars because dont work on linux
             itemContent = regExContent.search(request).group(1)
 
             attachmentObject._content = b64decode(itemContent)
@@ -617,8 +615,6 @@ class Exchange():
     # -----------------------------------------------Time Zone Handling-----------------------------------------------------
     # ----------------------------------------------------------------------------------------------------------------------
 
-
-
     def _SendHttp(self, body):
 
         body = body.encode()
@@ -630,8 +626,8 @@ class Exchange():
                 return (response.read().decode())
         except Exception as e:
             print('_SendHttp Exception:\n', e)
+            ProgramLog(str(e), 'error')
             raise e
-
 
     def GetAllEvents(self):
         return self._calendarItems.copy()
@@ -694,8 +690,6 @@ class Exchange():
         # if calendar is not None, this will check another users calendar
         # if calendar is None, it will check your own calendar
 
-
-
         xmlbody = """
             <?xml version="1.0" encoding="utf-8"?>
             <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -723,3 +717,5 @@ class Exchange():
         print('xmlbody=', xmlbody)
         response = self._SendHttp(xmlbody)
         print('GetItem response=', response)
+
+print('end exchange_interface.py')
