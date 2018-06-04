@@ -1,7 +1,8 @@
 import creds
 import exchange_interface
+import time
 
-
+print('time.asctime=', time.asctime())
 
 for resource in ['rnchallwaysignage1@extron.com', 'rnchallwaysignage2@extron.com']:
     exchange = exchange_interface.Exchange(

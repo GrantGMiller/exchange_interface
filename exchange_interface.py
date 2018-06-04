@@ -76,6 +76,7 @@ class _CalendarItem:
         self._data[key] = value
 
     def _CalculateDuration(self):
+        # Returns float in seconds
         delta = self.Get('End') - self.Get('Start')
         duration = delta.total_seconds()
         self.AddData('Duration', duration)
