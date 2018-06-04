@@ -8,7 +8,7 @@ from base64 import b64encode, b64decode
 import datetime
 import time
 
-DEBUG = True
+DEBUG = False
 if not DEBUG:
     print = lambda *a, **k: None
 
@@ -288,7 +288,7 @@ class Exchange():
                 '''.format(self._folderID, self._changeKey)
 
         elif emailRegex.search(calendar) is not None:  # email address
-            print('emailRegex')
+            print('emailRegex matched')
             parentFolder = '''
                 <m:ParentFolderIds>
                     <t:DistinguishedFolderId Id="calendar">
@@ -625,7 +625,7 @@ class Exchange():
             if response:
                 return (response.read().decode())
         except Exception as e:
-            print('_SendHttp Exception:\n', e)
+            print('_SendHttp Exception:\n', e, e.args)
             ProgramLog(str(e), 'error')
             raise e
 
