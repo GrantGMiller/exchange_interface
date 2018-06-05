@@ -627,7 +627,7 @@ class Exchange():
                 return (response.read().decode())
         except Exception as e:
             print('_SendHttp Exception:\n', e, e.args)
-            ProgramLog(str(e), 'error')
+            ProgramLog('exchange_interface.py Error:' + str(e), 'error')
             raise e
 
     def GetAllEvents(self):
