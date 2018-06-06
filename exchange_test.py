@@ -9,4 +9,4 @@ exchange = exchange_interface.Exchange(
 exchange.UpdateCalendar('rnchallwaysignage1@extron.com')
 
 items = exchange.GetNextCalItems()
-print('items=', items)
+print('nowItems=', items)

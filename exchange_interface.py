@@ -119,6 +119,7 @@ class _CalendarItem:
     def GetAttachments(self):
         self._attachments = []
         for attachmentID in self._parentExchange._GetAttachmentIDs(self):
+            print('122 attachmentID=', attachmentID)
             newAttachmentObject = _Attachment(attachmentID, self._parentExchange)
             self._attachments.append(newAttachmentObject)
 
@@ -177,6 +178,7 @@ class _Attachment:
     def SaveToPath(self, path):
         with File(path, mode='wb') as file:
             file.write(self.GetContent())
+
 
 
 class Exchange():
@@ -436,7 +438,7 @@ class Exchange():
                 if sub_calItem in self._calendarItems:
                     self._calendarItems.remove(sub_calItem)
 
-        # Remove any old items that have the same ItemId
+        # Remove any old nowItems that have the same ItemId
         itemId = calItem.Get('ItemId')
 
         for sub_calItem in self._calendarItems.copy():
@@ -587,7 +589,7 @@ class Exchange():
         # returns a list of attachment IDs
 
         itemId = calItem.Get('ItemId')
-        regExAttKey = re.compile(r'AttachmentId Id=\"(.+)\"')
+        regExAttKey = re.compile(r'AttachmentId Id=\"(\S+)\"')
         xmlBody = """<?xml version="1.0" encoding="utf-8"?>
                         <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                                        xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
@@ -653,7 +655,7 @@ class Exchange():
         return events
 
     def GetNowCalItems(self):
-        # returns list of calendar items happening now
+        # returns list of calendar nowItems happening now
 
         returnCalItems = []
 
