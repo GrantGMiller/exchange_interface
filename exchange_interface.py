@@ -162,6 +162,10 @@ class _Attachment:
 
         return self._content
 
+    def GetContentSize(self):
+        # return size of content in KB
+        return len(self.GetContent()) / 1024
+
     def GetID(self):
         return self.AttachmentId
 
