@@ -6,7 +6,7 @@ print('time.asctime=', time.asctime())
 
 
 #for resource in [ 'rnchallwaysignage1@extron.com']: #'rnchallwaysignage1@extron.com',
-for resource in [ 'rnchallwaysignage2@extron.com']: #'rnchallwaysignage1@extron.com',
+for resource in [ 'rnchallwaysignage1@extron.com']: #'rnchallwaysignage1@extron.com',
     exchange = exchange_interface.Exchange(
         username=creds.username,
         password=creds.password,

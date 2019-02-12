@@ -180,7 +180,6 @@ class _Attachment:
             file.write(self.GetContent())
 
 
-
 class Exchange():
     # Exchange methods
     def __init__(self,
@@ -724,5 +723,6 @@ class Exchange():
         print('xmlbody=', xmlbody)
         response = self._SendHttp(xmlbody)
         print('GetItem response=', response)
+
 
 print('end exchange_interface.py')
