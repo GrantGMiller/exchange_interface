@@ -279,10 +279,20 @@ class Exchange():
                 self._folderID = matchFolderInfo.group(1)
                 self._changeKey = matchFolderInfo.group(2)
 
-    def UpdateCalendar(self, calendar=None):
+    def UpdateCalendar(self, calendar=None, startDT=None, endDT=None):
         # gets the latest data for this week from exchange and stores it
         # if calendar is not None, this will check another users calendar
         # if calendar is None, it will check your own calendar
+
+        if startDT is None:
+            startDT = self._startOfWeek
+        else:
+            startDT = ConvertDatetimeToTimeString(startDT)
+
+        if endDT is None:
+            endDT = self._endOfWeek
+        else:
+            endDT = ConvertDatetimeToTimeString(endDT)
 
         emailRegex = re.compile('.*?\@.*?\..*?')
 
@@ -342,7 +352,12 @@ class Exchange():
                         </m:FindItem>
                       </soap:Body>
                     </soap:Envelope>
-                    """.format(self._soapHeader, self._startOfWeek, self._endOfWeek, parentFolder)
+                    """.format(
+            self._soapHeader,
+            startDT,
+            endDT,
+            parentFolder
+        )
 
         # """<?xml version="1.0" encoding="utf-8"?>
         #                     <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
