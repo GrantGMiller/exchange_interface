@@ -6,7 +6,7 @@ exchange = exchange_interface.Exchange(
     password=exchange_credentials.password,
 )
 
-exchange.UpdateCalendar()#'rnchallwaysignage1@extron.com')
+exchange.UpdateCalendar('rnchallwaysignage1@extron.com')
 
 items = exchange.GetNextCalItems()
 print('nowItems=', items)

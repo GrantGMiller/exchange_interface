@@ -45,7 +45,7 @@ RE_END_TIME = re.compile('<t:End>(.*?)</t:End>')  # group(1) = end time string #
 
 
 def ConvertTimeStringToDatetime(string):
-    # print('ConvertTimeStringToDatetime\nstring=', string)
+    #print('48 ConvertTimeStringToDatetime\nstring=', string)
     year, month, etc = string.split('-')
     day, etc = etc.split('T')
     hour, minute, etc = etc.split(':')
@@ -60,7 +60,7 @@ def ConvertTimeStringToDatetime(string):
     )
 
     dt = AdjustDatetimeForTimezone(dt, fromZone='Exchange')
-
+    #print('63 dt=', dt)
     return dt
 
 
@@ -71,10 +71,19 @@ def ConvertDatetimeToTimeString(dt):
 
 def AdjustDatetimeForTimezone(dt, fromZone):
     delta = datetime.timedelta(hours=abs(MY_TIME_ZONE))
+
+    ts = time.mktime(dt.timetuple())
+    lt = time.localtime(ts)
+    isDST = lt.tm_isdst > 0
+
     if fromZone == 'Mine':
         dt = dt + delta
+        if isDST:
+            dt -= datetime.timedelta(hours=1)
     elif fromZone == 'Exchange':
         dt = dt - delta
+        if isDST:
+            dt += datetime.timedelta(hours=1)
 
     return dt
 
@@ -112,10 +121,20 @@ class _CalendarItem:
             return self._data.get(key, None)
 
     def __contains__(self, dt):
+        '''
+        allows you to compare _CalendarItem object like you would compare datetime objects
+
+        Example:
+        if dt in calItem:
+            print('the datetime is within the CalendarItem start/end')
+
+        :param dt:
+        :return:
+        '''
         # Note: isinstance(datetime.datetime.now(), datetime.date.today()) == True
         # Because the point in time exist in that date
         if isinstance(dt, datetime.datetime):
-            if dt >= self._startDT and dt <= self._endDT:
+            if self._startDT <= dt <= self._endDT:
                 return True
             else:
                 return False
@@ -155,20 +174,69 @@ class _CalendarItem:
 
         return False
 
+    @property
+    def Data(self):
+        return self._data.copy()
+
     def __iter__(self):
         for k, v in self._data.items():
             yield k, v
 
     def __str__(self):
-        return '<CalendarItem object: Start={}, End={}, Subject={}, HasAttachements={}>'.format(
+        return '<CalendarItem object: Start={}, End={}, Subject={}, HasAttachements={}, ItemId[-7:]={}>'.format(
             self.Get('Start'),
             self.Get('End'),
             self.Get('Subject'),
             self.HasAttachments(),
+            self.Get('ItemId')[-7:],
         )
 
     def __repr__(self):
         return str(self)
+
+    def __eq__(self, other):
+        #print('188 __eq__', self, other)
+        return self.Data == other.Data
+
+    def __lt__(self, other):
+        #print('192 __lt__', self, other)
+        if isinstance(other, datetime.datetime):
+            return self._startDT < other
+
+        elif isinstance(other, _CalendarItem):
+            return self._startDT < other._startDT
+
+        else:
+            raise TypeError('unorderable types: {} < {}'.format(self, other))
+
+    def __le__(self, other):
+        #print('203 __le__', self, other)
+        if isinstance(other, datetime.datetime):
+            return self._startDT <= other
+
+        elif isinstance(other, _CalendarItem):
+            return self._startDT <= other._startDT
+
+        else:
+            raise TypeError('unorderable types: {} < {}'.format(self, other))
+
+    def __gt__(self, other):
+        #print('214 __gt__', self, other)
+        if isinstance(other, datetime.datetime):
+            return self._endDT > other
+        elif isinstance(other, _CalendarItem):
+            return self._endDT > other._endDT
+        else:
+            raise TypeError('unorderable types: {} < {}'.format(self, other))
+
+    def __ge__(self, other):
+        #print('223 __ge__', self, other)
+        if isinstance(other, datetime.datetime):
+            return self._endDT >= other
+        elif isinstance(other, _CalendarItem):
+            return self._endDT >= other._endDT
+        else:
+            raise TypeError('unorderable types: {} < {}'.format(self, other))
 
 
 class _Attachment:
@@ -231,7 +299,67 @@ class Exchange():
 
         self._folderID = None
         self._changeKey = None
+
+        self._connectionStatus = None
+        self._Connected = None
+        self._Disconnected = None
+
+        self._CalendarItemDeleted = None  # callback for when an item is deleted
+        self._CalendarItemChanged = None
+        self._NewCalendarItem = None
+
         self._UpdateFolderIdAndChangeKey()
+
+    @property
+    def NewCalendarItem(self):
+        return self._NewCalendarItem
+
+    @NewCalendarItem.setter
+    def NewCalendarItem(self, func):
+        self._NewCalendarItem = func
+##############
+    @property
+    def CalendarItemChanged(self):
+        return self._CalendarItemChanged
+
+    @CalendarItemChanged.setter
+    def CalendarItemChanged(self, func):
+        self._CalendarItemChanged = func
+############
+    @property
+    def CalendarItemDeleted(self):
+        return self._CalendarItemDeleted
+
+    @CalendarItemDeleted.setter
+    def CalendarItemDeleted(self, func):
+        self._CalendarItemDeleted = func
+############
+    @property
+    def Connected(self):
+        return self._Connected
+
+    @Connected.setter
+    def Connected(self, func):
+        self._Connected = func
+#############
+    @property
+    def Disconnected(self):
+        return self._Disconnected
+
+    @Disconnected.setter
+    def Disconnected(self, func):
+        self._Disconnected = func
+
+    def _NewConnectionStatus(self, state):
+        if state != self._connectionStatus:
+            # the connection status has changed
+            self._connectionStatus = state
+            if state == 'Connected':
+                if callable(self._Connected):
+                    self._Connected(self, state)
+            elif state == 'Disconnected':
+                if callable(self._Disconnected):
+                    self._Disconnected(self, state)
 
     # ----------------------------------------------------------------------------------------------------------------------
     # --------------------------------------------------EWS Services--------------------------------------------------------
@@ -309,14 +437,14 @@ class Exchange():
         # if calendar is None, it will check your own calendar
 
         if startDT is None:
-            startDT = self._startOfWeek
+            startDTstring = self._startOfWeek
         else:
-            startDT = ConvertDatetimeToTimeString(startDT)
+            startDTstring = ConvertDatetimeToTimeString(startDT)
 
         if endDT is None:
-            endDT = self._endOfWeek
+            endDTstring = self._endOfWeek
         else:
-            endDT = ConvertDatetimeToTimeString(endDT)
+            endDTstring = ConvertDatetimeToTimeString(endDT)
 
         emailRegex = re.compile('.*?\@.*?\..*?')
 
@@ -325,7 +453,10 @@ class Exchange():
                 <m:ParentFolderIds>
                     <t:FolderId Id="{}" ChangeKey="{}" />
                 </m:ParentFolderIds>
-                '''.format(self._folderID, self._changeKey)
+                '''.format(
+                self._folderID,
+                self._changeKey
+            )
 
         elif emailRegex.search(calendar) is not None:  # email address
             print('emailRegex matched')
@@ -378,57 +509,41 @@ class Exchange():
                     </soap:Envelope>
                     """.format(
             self._soapHeader,
-            startDT,
-            endDT,
+            startDTstring,
+            endDTstring,
             parentFolder
         )
 
-        # """<?xml version="1.0" encoding="utf-8"?>
-        #                     <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        #                            xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
-        #                            xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
-        #                            xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-        #                       <soap:Header>
-        #                         {0}
-        #                       </soap:Header>
-        #                       <soap:Body>
-        #                         <m:FindItem Traversal="Shallow">
-        #                           <m:ItemShape>
-        #                             <t:BaseShape>IdOnly</t:BaseShape>
-        #                             <t:AdditionalProperties>
-        #                               <t:FieldURI FieldURI="item:Subject" />
-        #                               <t:FieldURI FieldURI="calendar:Start" />
-        #                               <t:FieldURI FieldURI="calendar:End" />
-        #                               <t:FieldURI FieldURI="calendar:Organizer" />
-        #                               <t:FieldURI FieldURI="item:HasAttachments" />
-        #                             </t:AdditionalProperties>
-        #                           </m:ItemShape>
-        #                           <m:CalendarView MaxEntriesReturned="100" StartDate="{1}" EndDate="{2}" />
-        #                           {3}
-        #                         </m:FindItem>
-        #                       </soap:Body>
-        #                     </soap:Envelope>
-        #                     """.format(self._soapHeader, self._startOfWeek, self._endOfWeek, parentFolder)
-
-        # print('xtmbody=', xmlbody)
         response = self._SendHttp(xmlbody)
         print('response=', response)
-        # response now holds all the calendar events between startOfWeek and endOfWeek
 
-        regexCalendarItem = re.compile('<t:CalendarItem>.*?<\/t:CalendarItem>')
+        exchangeItems = self._CreateCalendarItemsFromResponse(response)
 
-        regexItemId = re.compile(
-            '<t:ItemId Id="(.*?)" ChangeKey="(.*?)"/>')  # group(1) = itemID, group(2) = changeKey #within a CalendarItem
-        regexSubject = re.compile('<t:Subject>(.*?)</t:Subject>')  # within a CalendarItem
-        regexHasAttachments = re.compile('<t:HasAttachments>(.{4,5})</t:HasAttachments>')  # within a CalendarItem
-        regexOrganizer = re.compile(
-            '<t:Organizer>.*<t:Name>(.*?)</t:Name>.*</t:Organizer>')  # group(1)=Name #within a CalendarItem
-        regexStartTime = re.compile('<t:Start>(.*?)</t:Start>')  # group(1) = start time string #within a CalendarItem
-        regextEndTime = re.compile('<t:End>(.*?)</t:End>')  # group(1) = end time string #within a CalendarItem
+        # check all calitems for changes
+        # do callbacks if something changes
 
-        calItems = self._CreateCalendarItemsFromResponse(response)
-        for item in calItems:
-            self._AddCalendarItem(item)
+        for exchangeItem in exchangeItems:
+            selfItem = self.GetCalendarItemByID(exchangeItem.Get('ItemId'))
+            if selfItem is None:
+                # this is a new item do callback
+                self._calendarItems.append(exchangeItem)
+                if callable(self._NewCalendarItem):
+                    self._NewCalendarItem(self, exchangeItem)
+
+            elif selfItem != exchangeItem:
+                # the item has changed somehow, do callback
+                self._calendarItems.remove(selfItem)
+                self._calendarItems.append(exchangeItem)
+                if callable(self._CalendarItemChanged):
+                    self._CalendarItemChanged(self, exchangeItem)
+
+        for selfItem in self._calendarItems.copy():
+            if startDT <= selfItem <= endDT:
+                if selfItem not in exchangeItems:
+                    # a event was deleted from the exchange server
+                    self._calendarItems.remove(selfItem)
+                    if callable(self._CalendarItemDeleted):
+                        self._CalendarItemDeleted(self, selfItem)
 
     def _CreateCalendarItemsFromResponse(self, response):
         '''
@@ -482,12 +597,12 @@ class Exchange():
         '''
 
         # Remove any CalendarItems that have ended in the past
-        nowDT = datetime.datetime.now()
-        for sub_calItem in self._calendarItems.copy():
-            endDT = sub_calItem.Get('End')
-            if endDT < nowDT:
-                if sub_calItem in self._calendarItems:
-                    self._calendarItems.remove(sub_calItem)
+        # nowDT = datetime.datetime.now()
+        # for sub_calItem in self._calendarItems.copy():
+        #     endDT = sub_calItem.Get('End')
+        #     if endDT < nowDT:
+        #         if sub_calItem in self._calendarItems:
+        #             self._calendarItems.remove(sub_calItem)
 
         # Remove any old nowItems that have the same ItemId
         itemId = calItem.Get('ItemId')
@@ -694,11 +809,13 @@ class Exchange():
             if response:
                 ret = response.read().decode()
                 print('655 _SendHttp ret=', ret)
+                self._NewConnectionStatus('Connected')
                 return ret
         except Exception as e:
+            self._NewConnectionStatus('Disconnected')
             print('_SendHttp Exception:\n', e, e.args)
             ProgramLog('exchange_interface.py Error:' + str(e), 'error')
-            raise e
+            # raise e
 
     def GetAllEvents(self):
         return self._calendarItems.copy()
