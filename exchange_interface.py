@@ -8,7 +8,7 @@ from base64 import b64encode, b64decode
 import datetime
 import time
 
-DEBUG = False
+DEBUG = True
 if not DEBUG:
     print = lambda *a, **k: None
 
@@ -22,8 +22,26 @@ offsetSeconds = time.timezone if (time.localtime().tm_isdst == 0) else time.altz
 offsetHours = offsetSeconds / 60 / 60 * -1
 MY_TIME_ZONE = offsetHours
 
+TZ_NAME = time.tzname[0]
+if TZ_NAME == 'EST':
+    TZ_NAME = 'Eastern Standard Time'
+elif TZ_NAME == 'PST':
+    TZ_NAME = 'Pacific Standard Time'
+elif TZ_NAME == 'CST':
+    TZ_NAME = 'Central Standard Time'
+
 print('MY_TIME_ZONE= UTC {}'.format(MY_TIME_ZONE))
 print('CURRENT SYSTEM TIME=', time.asctime())
+
+RE_CAL_ITEM = re.compile('<t:CalendarItem>.*?<\/t:CalendarItem>')
+RE_ITEM_ID = re.compile(
+    '<t:ItemId Id="(.*?)" ChangeKey="(.*?)"/>')  # group(1) = itemID, group(2) = changeKey #within a CalendarItem
+RE_SUBJECT = re.compile('<t:Subject>(.*?)</t:Subject>')  # within a CalendarItem
+RE_HAS_ATTACHMENTS = re.compile('<t:HasAttachments>(.{4,5})</t:HasAttachments>')  # within a CalendarItem
+RE_ORGANIZER = re.compile(
+    '<t:Organizer>.*<t:Name>(.*?)</t:Name>.*</t:Organizer>')  # group(1)=Name #within a CalendarItem
+RE_START_TIME = re.compile('<t:Start>(.*?)</t:Start>')  # group(1) = start time string #within a CalendarItem
+RE_END_TIME = re.compile('<t:End>(.*?)</t:End>')  # group(1) = end time string #within a CalendarItem
 
 
 def ConvertTimeStringToDatetime(string):
@@ -137,11 +155,17 @@ class _CalendarItem:
 
         return False
 
+    def __iter__(self):
+        for k, v in self._data.items():
+            yield k, v
+
     def __str__(self):
-        return '<CalendarItem object: Start={}, End={}, Subject={}, HasAttachements={}>'.format(self.Get('Start'),
-                                                                                                self.Get('End'),
-                                                                                                self.Get('Subject'),
-                                                                                                self.HasAttachments())
+        return '<CalendarItem object: Start={}, End={}, Subject={}, HasAttachements={}>'.format(
+            self.Get('Start'),
+            self.Get('End'),
+            self.Get('Subject'),
+            self.HasAttachments(),
+        )
 
     def __repr__(self):
         return str(self)
@@ -402,7 +426,18 @@ class Exchange():
         regexStartTime = re.compile('<t:Start>(.*?)</t:Start>')  # group(1) = start time string #within a CalendarItem
         regextEndTime = re.compile('<t:End>(.*?)</t:End>')  # group(1) = end time string #within a CalendarItem
 
-        for matchCalItem in regexCalendarItem.finditer(response):
+        calItems = self._CreateCalendarItemsFromResponse(response)
+        for item in calItems:
+            self._AddCalendarItem(item)
+
+    def _CreateCalendarItemsFromResponse(self, response):
+        '''
+
+        :param response:
+        :return: list of calendar items
+        '''
+        ret = []
+        for matchCalItem in RE_CAL_ITEM.finditer(response):
             # go thru the resposne and find any CalendarItems.
             # parse their data and create CalendarItem objects
             # store CalendarItem objects in self
@@ -413,13 +448,13 @@ class Exchange():
             startDT = None
             endDT = None
 
-            matchItemId = regexItemId.search(matchCalItem.group(0))
+            matchItemId = RE_ITEM_ID.search(matchCalItem.group(0))
             data['ItemId'] = matchItemId.group(1)
             data['ChangeKey'] = matchItemId.group(2)
-            data['Subject'] = regexSubject.search(matchCalItem.group(0)).group(1)
-            data['OrganizerName'] = regexOrganizer.search(matchCalItem.group(0)).group(1)
+            data['Subject'] = RE_SUBJECT.search(matchCalItem.group(0)).group(1)
+            data['OrganizerName'] = RE_ORGANIZER.search(matchCalItem.group(0)).group(1)
 
-            res = regexHasAttachments.search(matchCalItem.group(0)).group(1)
+            res = RE_HAS_ATTACHMENTS.search(matchCalItem.group(0)).group(1)
             if 'true' in res:
                 data['HasAttachments'] = True
             elif 'false' in res:
@@ -427,14 +462,16 @@ class Exchange():
             else:
                 data['HasAttachments'] = 'Unknown'
 
-            startTimeString = regexStartTime.search(matchCalItem.group(0)).group(1)
-            endTimeString = regextEndTime.search(matchCalItem.group(0)).group(1)
+            startTimeString = RE_START_TIME.search(matchCalItem.group(0)).group(1)
+            endTimeString = RE_END_TIME.search(matchCalItem.group(0)).group(1)
 
             startDT = ConvertTimeStringToDatetime(startTimeString)
             endDT = ConvertTimeStringToDatetime(endTimeString)
 
             calItem = _CalendarItem(startDT, endDT, data, self)
-            self._AddCalendarItem(calItem)
+            ret.append(calItem)
+
+        return ret
 
     def _AddCalendarItem(self, calItem):
         '''
@@ -463,6 +500,7 @@ class Exchange():
         self._calendarItems.append(calItem)
 
     def CreateCalendarEvent(self, subject, body, startDT=None, endDT=None):
+        print('CreateCalendarEvent(', subject, body, startDT, endDT)
 
         startTimeString = ConvertDatetimeToTimeString(startDT)
         endTimeString = ConvertDatetimeToTimeString(endDT)
@@ -488,8 +526,14 @@ class Exchange():
                           </m:Items>
                         </m:CreateItem>
                       </soap:Body>
-                    </soap:Envelope>""".format(self._soapHeader, subject, body, startTimeString, endTimeString,
-                                               time.tzname[0])
+                    </soap:Envelope>""".format(
+            self._soapHeader,
+            subject,
+            body,
+            startTimeString,
+            endTimeString,
+            TZ_NAME
+        )
 
         self._SendHttp(xmlBody)
 
@@ -541,7 +585,7 @@ class Exchange():
         self._SendHttp(xmlBody)
 
     def DeleteEvent(self, calItem):
-
+        print('565 DeleteEvent(', calItem)
         xmlBody = """<?xml version="1.0" encoding="utf-8"?>
                     <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                            xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
@@ -557,7 +601,11 @@ class Exchange():
                           </m:ItemIds>
                         </m:DeleteItem>
                       </soap:Body>
-                    </soap:Envelope>""".format(self._soapHeader, calItem.Get('ItemId'), calItem.Get('ChangeKey'))
+                    </soap:Envelope>""".format(
+            self._soapHeader,
+            calItem.Get('ItemId'),
+            calItem.Get('ChangeKey')
+        )
 
         request = self._SendHttp(xmlBody)
 
@@ -637,14 +685,16 @@ class Exchange():
     # ----------------------------------------------------------------------------------------------------------------------
 
     def _SendHttp(self, body):
-
+        print('647 _SendHttp body=', body)
         body = body.encode()
         request = urllib.request.Request(self.httpURL, body, self.header, method='POST')
 
         try:
             response = urllib.request.urlopen(request)
             if response:
-                return (response.read().decode())
+                ret = response.read().decode()
+                print('655 _SendHttp ret=', ret)
+                return ret
         except Exception as e:
             print('_SendHttp Exception:\n', e, e.args)
             ProgramLog('exchange_interface.py Error:' + str(e), 'error')
@@ -704,40 +754,44 @@ class Exchange():
                     returnCalItems.append(calItem)
             return returnCalItems
 
-    def GetItem(self, itemID, changeID):
-        # WIP 07/25/2017
+    def GetItem(self, itemID):
+        print('758 GetItem(itemID=', itemID)
 
-        # gets the latest data for this week from exchange and stores it
-        # if calendar is not None, this will check another users calendar
-        # if calendar is None, it will check your own calendar
-
-        xmlbody = """
-            <?xml version="1.0" encoding="utf-8"?>
-            <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
-               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
-               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-            <soap:Header>
-                {2}
-            </soap:Header>
-              <soap:Body>
-                <GetItem xmlns="http://schemas.microsoft.com/exchange/services/2006/messages">
-                  <ItemShape>
-                    <t:BaseShape>IdOnly</t:BaseShape>
-                    <t:AdditionalProperties>
-                      <t:FieldURI FieldURI="item:Subject"/>
-                    </t:AdditionalProperties>
-                  </ItemShape>
-                  <ItemIds>
-                    <t:ItemId Id="{0}" ChangeKey="{1}"/>
-                  </ItemIds>
-                </GetItem>
-              </soap:Body>
-            </soap:Envelope>""".format(itemID, changeID, self._soapHeader)
-
-        print('xmlbody=', xmlbody)
-        response = self._SendHttp(xmlbody)
-        print('GetItem response=', response)
+        xmlBody = """<?xml version="1.0" encoding="utf-8"?>
+                                <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                                               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+                                               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+                                               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+                                  <soap:Header>
+                                    {0}
+                                  </soap:Header>
+                                  <soap:Body>
+                                    <m:GetItem>
+                                      <m:ItemShape>
+                                        <t:BaseShape>IdOnly</t:BaseShape>
+                                        <t:AdditionalProperties>
+                                        <t:FieldURI FieldURI="item:Subject" />
+                                          <t:FieldURI FieldURI="item:Subject" />
+                                          <t:FieldURI FieldURI="calendar:Start" />
+                                          <t:FieldURI FieldURI="calendar:End" />
+                                          <t:FieldURI FieldURI="calendar:Organizer">
+                                          </t:FieldURI>
+                                          <t:FieldURI FieldURI="item:HasAttachments" />
+                                        </t:AdditionalProperties>
+                                      </m:ItemShape>
+                                      <m:ItemIds>
+                                        <t:ItemId Id="{1}" />
+                                      </m:ItemIds>
+                                    </m:GetItem>
+                                  </soap:Body>
+                                </soap:Envelope>""".format(
+            self._soapHeader,
+            itemID
+        )
+        response = self._SendHttp(xmlBody)
+        calItems = self._CreateCalendarItemsFromResponse(response)
+        print('792 calItems=', calItems)
+        return calItems[0]
 
 
 print('end exchange_interface.py')
