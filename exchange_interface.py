@@ -516,34 +516,37 @@ class Exchange():
 
         response = self._SendHttp(xmlbody)
         print('response=', response)
+        if response:
+            exchangeItems = self._CreateCalendarItemsFromResponse(response)
 
-        exchangeItems = self._CreateCalendarItemsFromResponse(response)
+            # check all calitems for changes
+            # do callbacks if something changes
 
-        # check all calitems for changes
-        # do callbacks if something changes
+            for exchangeItem in exchangeItems:
+                selfItem = self.GetCalendarItemByID(exchangeItem.Get('ItemId'))
+                if selfItem is None:
+                    # this is a new item do callback
+                    self._calendarItems.append(exchangeItem)
+                    if callable(self._NewCalendarItem):
+                        self._NewCalendarItem(self, exchangeItem)
 
-        for exchangeItem in exchangeItems:
-            selfItem = self.GetCalendarItemByID(exchangeItem.Get('ItemId'))
-            if selfItem is None:
-                # this is a new item do callback
-                self._calendarItems.append(exchangeItem)
-                if callable(self._NewCalendarItem):
-                    self._NewCalendarItem(self, exchangeItem)
-
-            elif selfItem != exchangeItem:
-                # the item has changed somehow, do callback
-                self._calendarItems.remove(selfItem)
-                self._calendarItems.append(exchangeItem)
-                if callable(self._CalendarItemChanged):
-                    self._CalendarItemChanged(self, exchangeItem)
-
-        for selfItem in self._calendarItems.copy():
-            if startDT <= selfItem <= endDT:
-                if selfItem not in exchangeItems:
-                    # a event was deleted from the exchange server
+                elif selfItem != exchangeItem:
+                    # the item has changed somehow, do callback
                     self._calendarItems.remove(selfItem)
-                    if callable(self._CalendarItemDeleted):
-                        self._CalendarItemDeleted(self, selfItem)
+                    self._calendarItems.append(exchangeItem)
+                    if callable(self._CalendarItemChanged):
+                        self._CalendarItemChanged(self, exchangeItem)
+
+            for selfItem in self._calendarItems.copy():
+                if startDT <= selfItem <= endDT:
+                    if selfItem not in exchangeItems:
+                        # a event was deleted from the exchange server
+                        self._calendarItems.remove(selfItem)
+                        if callable(self._CalendarItemDeleted):
+                            self._CalendarItemDeleted(self, selfItem)
+
+        else:
+            raise Exception('UpdateCalendar failed. Check ProgramLog')
 
     def _CreateCalendarItemsFromResponse(self, response):
         '''
