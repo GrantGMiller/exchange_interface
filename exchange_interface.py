@@ -130,6 +130,9 @@ class _CalendarItem:
         else:
             return self._data.get(key, None)
 
+    def get(self, key):
+        return self.Get(key)
+
     def __contains__(self, dt):
         '''
         allows you to compare _CalendarItem object like you would compare datetime objects
