@@ -74,16 +74,26 @@ def AdjustDatetimeForTimezone(dt, fromZone):
 
     ts = time.mktime(dt.timetuple())
     lt = time.localtime(ts)
-    isDST = lt.tm_isdst > 0
+    dtIsDST = lt.tm_isdst > 0
+
+    nowIsDST = time.localtime().tm_isdst > 0
+
+    print('nowIsDST=', nowIsDST)
+    print('dtIsDST=', dtIsDST)
 
     if fromZone == 'Mine':
         dt = dt + delta
-        if isDST:
+        if dtIsDST and not nowIsDST:
             dt -= datetime.timedelta(hours=1)
+        elif nowIsDST and not dtIsDST:
+            dt += datetime.timedelta(hours=1)
+
     elif fromZone == 'Exchange':
         dt = dt - delta
-        if isDST:
+        if dtIsDST and not nowIsDST:
             dt += datetime.timedelta(hours=1)
+        elif nowIsDST and not dtIsDST:
+            dt -= datetime.timedelta(hours=1)
 
     return dt
 
