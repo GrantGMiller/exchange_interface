@@ -45,7 +45,7 @@ RE_END_TIME = re.compile('<t:End>(.*?)</t:End>')  # group(1) = end time string #
 
 
 def ConvertTimeStringToDatetime(string):
-    #print('48 ConvertTimeStringToDatetime\nstring=', string)
+    # print('48 ConvertTimeStringToDatetime\nstring=', string)
     year, month, etc = string.split('-')
     day, etc = etc.split('T')
     hour, minute, etc = etc.split(':')
@@ -60,7 +60,7 @@ def ConvertTimeStringToDatetime(string):
     )
 
     dt = AdjustDatetimeForTimezone(dt, fromZone='Exchange')
-    #print('63 dt=', dt)
+    # print('63 dt=', dt)
     return dt
 
 
@@ -192,6 +192,9 @@ class _CalendarItem:
         for k, v in self._data.items():
             yield k, v
 
+        for key in ['Start', 'End', 'Duration']:
+            yield key, self.Get(key)
+
     def __str__(self):
         return '<CalendarItem object: Start={}, End={}, Subject={}, HasAttachements={}, ItemId[-7:]={}>'.format(
             self.Get('Start'),
@@ -205,46 +208,58 @@ class _CalendarItem:
         return str(self)
 
     def __eq__(self, other):
-        #print('188 __eq__', self, other)
+        # print('188 __eq__', self, other)
         return self.Data == other.Data
 
     def __lt__(self, other):
-        #print('192 __lt__', self, other)
+        # print('192 __lt__', self, other)
         if isinstance(other, datetime.datetime):
             return self._startDT < other
 
         elif isinstance(other, _CalendarItem):
             return self._startDT < other._startDT
 
+        elif isinstance(other, type(None)):
+            return False
+
         else:
             raise TypeError('unorderable types: {} < {}'.format(self, other))
 
     def __le__(self, other):
-        #print('203 __le__', self, other)
+        # print('203 __le__', self, other)
         if isinstance(other, datetime.datetime):
             return self._startDT <= other
 
         elif isinstance(other, _CalendarItem):
             return self._startDT <= other._startDT
 
+        elif isinstance(other, type(None)):
+            return False
+
         else:
             raise TypeError('unorderable types: {} < {}'.format(self, other))
 
     def __gt__(self, other):
-        #print('214 __gt__', self, other)
+        # print('214 __gt__', self, other)
         if isinstance(other, datetime.datetime):
             return self._endDT > other
         elif isinstance(other, _CalendarItem):
             return self._endDT > other._endDT
+
+        elif isinstance(other, type(None)):
+            return False
         else:
             raise TypeError('unorderable types: {} < {}'.format(self, other))
 
     def __ge__(self, other):
-        #print('223 __ge__', self, other)
+        # print('223 __ge__', self, other)
         if isinstance(other, datetime.datetime):
             return self._endDT >= other
         elif isinstance(other, _CalendarItem):
             return self._endDT >= other._endDT
+
+        elif isinstance(other, type(None)):
+            return False
         else:
             raise TypeError('unorderable types: {} < {}'.format(self, other))
 
@@ -327,7 +342,8 @@ class Exchange():
     @NewCalendarItem.setter
     def NewCalendarItem(self, func):
         self._NewCalendarItem = func
-##############
+
+    ##############
     @property
     def CalendarItemChanged(self):
         return self._CalendarItemChanged
@@ -335,7 +351,8 @@ class Exchange():
     @CalendarItemChanged.setter
     def CalendarItemChanged(self, func):
         self._CalendarItemChanged = func
-############
+
+    ############
     @property
     def CalendarItemDeleted(self):
         return self._CalendarItemDeleted
@@ -343,7 +360,8 @@ class Exchange():
     @CalendarItemDeleted.setter
     def CalendarItemDeleted(self, func):
         self._CalendarItemDeleted = func
-############
+
+    ############
     @property
     def Connected(self):
         return self._Connected
@@ -351,7 +369,8 @@ class Exchange():
     @Connected.setter
     def Connected(self, func):
         self._Connected = func
-#############
+
+    #############
     @property
     def Disconnected(self):
         return self._Disconnected
