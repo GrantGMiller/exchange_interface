@@ -138,7 +138,7 @@ class _CalendarItem:
         allows you to compare _CalendarItem object like you would compare datetime objects
 
         Example:
-        if dt in calItem:
+        if datetime.datetime.now() in calItem:
             print('the datetime is within the CalendarItem start/end')
 
         :param dt:
@@ -222,9 +222,6 @@ class _CalendarItem:
         elif isinstance(other, _CalendarItem):
             return self._startDT < other._startDT
 
-        elif isinstance(other, type(None)):
-            return False
-
         else:
             raise TypeError('unorderable types: {} < {}'.format(self, other))
 
@@ -236,9 +233,6 @@ class _CalendarItem:
         elif isinstance(other, _CalendarItem):
             return self._startDT <= other._startDT
 
-        elif isinstance(other, type(None)):
-            return False
-
         else:
             raise TypeError('unorderable types: {} < {}'.format(self, other))
 
@@ -249,8 +243,6 @@ class _CalendarItem:
         elif isinstance(other, _CalendarItem):
             return self._endDT > other._endDT
 
-        elif isinstance(other, type(None)):
-            return False
         else:
             raise TypeError('unorderable types: {} < {}'.format(self, other))
 
@@ -261,8 +253,6 @@ class _CalendarItem:
         elif isinstance(other, _CalendarItem):
             return self._endDT >= other._endDT
 
-        elif isinstance(other, type(None)):
-            return False
         else:
             raise TypeError('unorderable types: {} < {}'.format(self, other))
 
@@ -423,12 +413,24 @@ class Exchange():
             todayDT = datetime.date.today()
             weekday = todayDT.weekday()
             startWeekDT = todayDT - datetime.timedelta(days=weekday)
+            self._startWeekDT = datetime.datetime(
+                year=startWeekDT.year,
+                month=startWeekDT.month,
+                day=startWeekDT.day,
+            )
             self._startOfWeek = ConvertDatetimeToTimeString(startWeekDT)
 
         if self._endOfWeek is None:
             todayDT = datetime.date.today()
             weekday = todayDT.weekday()
             endWeekDT = todayDT + datetime.timedelta(days=6 - weekday)
+            self._endWeekDT = datetime.datetime(
+                year=endWeekDT.year,
+                month=endWeekDT.month,
+                day=endWeekDT.day,
+                hour=23,
+                minute=59,
+            )
             self._endOfWeek = ConvertDatetimeToTimeString(endWeekDT)
 
         regExFolderInfo = re.compile(r't:FolderId Id=\"(.{1,})\" ChangeKey=\"(.{1,})\"\/')
@@ -470,11 +472,13 @@ class Exchange():
 
         if startDT is None:
             startDTstring = self._startOfWeek
+            startDT = self._startWeekDT
         else:
             startDTstring = ConvertDatetimeToTimeString(startDT)
 
         if endDT is None:
             endDTstring = self._endOfWeek
+            endDT = self._endWeekDT
         else:
             endDTstring = ConvertDatetimeToTimeString(endDT)
 
@@ -570,6 +574,8 @@ class Exchange():
                         self._CalendarItemChanged(self, exchangeItem)
 
             for selfItem in self._calendarItems.copy():
+                # print('startDT=', startDT)
+                # print('endDT=', endDT)
                 if startDT <= selfItem <= endDT:
                     if selfItem not in exchangeItems:
                         # a event was deleted from the exchange server
@@ -869,6 +875,14 @@ class Exchange():
                 events.append(calItem)
 
         return events
+
+    def GetEventsInRange(self, startDT, endDT):
+        ret = []
+        for item in self._calendarItems:
+            if startDT <= item <= endDT:
+                ret.append(item)
+
+        return ret
 
     def GetNowCalItems(self):
         # returns list of calendar nowItems happening now
