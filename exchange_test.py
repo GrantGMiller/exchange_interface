@@ -1,3 +1,5 @@
+import time
+
 import creds as exchange_credentials
 import exchange_interface
 
@@ -30,3 +32,8 @@ exchange.CalendarItemDeleted = DeletedCallback
 print('nowItems=', items)
 
 exchange.UpdateCalendar()
+print('\n\n\n********************************************\n\n\n')
+time.sleep(30)
+print('37')
+exchange.UpdateCalendar()
+print('39')

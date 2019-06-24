@@ -9,6 +9,7 @@ import datetime
 import time
 
 DEBUG = False
+oldPrint = print
 if not DEBUG:
     print = lambda *a, **k: None
 
@@ -211,8 +212,9 @@ class _CalendarItem:
         return str(self)
 
     def __eq__(self, other):
-        # print('188 __eq__', self, other)
-        return self.Data == other.Data
+        #oldPrint('188 __eq__ self.Data=', self.Data, ',\nother.Data=', other.Data)
+        return self.Get('ItemId') == other.Get('ItemId') and \
+               self.Get('ChangeKey') == other.Get('ChangeKey')
 
     def __lt__(self, other):
         # print('192 __lt__', self, other)
@@ -482,6 +484,9 @@ class Exchange():
         else:
             endDTstring = ConvertDatetimeToTimeString(endDT)
 
+        if self._endWeekDT < datetime.datetime.now():
+            self._UpdateFolderIdAndChangeKey()
+
         emailRegex = re.compile('.*?\@.*?\..*?')
 
         if calendar is None:
@@ -559,20 +564,22 @@ class Exchange():
             # do callbacks if something changes
 
             for exchangeItem in exchangeItems:
-                selfItem = self.GetCalendarItemByID(exchangeItem.Get('ItemId'))
-                if selfItem is None:
-                    # this is a new item do callback
-                    self._calendarItems.append(exchangeItem)
-                    if callable(self._NewCalendarItem):
-                        self._NewCalendarItem(self, exchangeItem)
+                if not exchangeItem.Get('Subject').startswith('Canceled:'): # ignore cancelled items
+                    selfItem = self.GetCalendarItemByID(exchangeItem.Get('ItemId'))
+                    if selfItem is None:
+                        # this is a new item do callback
+                        self._calendarItems.append(exchangeItem)
+                        if callable(self._NewCalendarItem):
+                            self._NewCalendarItem(self, exchangeItem)
 
-                elif selfItem != exchangeItem:
-                    # the item has changed somehow, do callback
-                    self._calendarItems.remove(selfItem)
-                    self._calendarItems.append(exchangeItem)
-                    if callable(self._CalendarItemChanged):
-                        self._CalendarItemChanged(self, exchangeItem)
+                    elif selfItem != exchangeItem:
+                        # the item has changed somehow, do callback
+                        self._calendarItems.remove(selfItem)
+                        self._calendarItems.append(exchangeItem)
+                        if callable(self._CalendarItemChanged):
+                            self._CalendarItemChanged(self, exchangeItem)
 
+            # check all the items to make sure nothings been deleted
             for selfItem in self._calendarItems.copy():
                 # print('startDT=', startDT)
                 # print('endDT=', endDT)
