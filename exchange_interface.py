@@ -890,7 +890,7 @@ class Exchange:
         request = urllib.request.Request(self.httpURL, body, self.header, method='POST')
 
         try:
-            response = urllib.request.urlopen(request
+            response = urllib.request.urlopen(request)
 
             if response:
                 ret = response.read().decode()
