@@ -6,6 +6,7 @@ import exchange_interface
 exchange = exchange_interface.Exchange(
     username=exchange_credentials.username,
     password=exchange_credentials.password,
+    # impersonation='mpower@extron.com'
 )
 
 # exchange.UpdateCalendar('rnchallwaysignage1@extron.com')
@@ -35,5 +36,5 @@ exchange.UpdateCalendar()
 print('\n\n\n********************************************\n\n\n')
 time.sleep(30)
 print('37')
-exchange.UpdateCalendar()
-print('39')
+# exchange.UpdateCalendar()
+# print('39')

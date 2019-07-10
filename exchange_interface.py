@@ -120,14 +120,13 @@ class _CalendarItem:
         self.AddData('Duration', duration)
 
     def Get(self, key):
-        if key is 'Start':
+        if key == 'Start':
             return self._startDT
-        elif key is 'End':
+        elif key == 'End':
             return self._endDT
-        elif key is 'Duration':
-            if 'Duration' not in self._data:
-                self._CalculateDuration()
-                return self._data.get(key, None)
+        elif key == 'Duration':
+            self._CalculateDuration()
+            return self._data.get(key, None)
         else:
             return self._data.get(key, None)
 
@@ -212,7 +211,7 @@ class _CalendarItem:
         return str(self)
 
     def __eq__(self, other):
-        #oldPrint('188 __eq__ self.Data=', self.Data, ',\nother.Data=', other.Data)
+        # oldPrint('188 __eq__ self.Data=', self.Data, ',\nother.Data=', other.Data)
         return self.Get('ItemId') == other.Get('ItemId') and \
                self.Get('ChangeKey') == other.Get('ChangeKey')
 
@@ -292,14 +291,34 @@ class _Attachment:
             file.write(self.GetContent())
 
 
-class Exchange():
+class Exchange:
     # Exchange methods
     def __init__(self,
                  username,
                  password,
                  server='outlook.office365.com',
                  impersonation=None,
+                 httpProxy=None,
+                 httpsProxy=None,
                  ):
+
+        self._httpProxy = httpProxy
+        self._httpsProxy = httpsProxy
+
+        if self._httpProxy is None and self._httpsProxy is None:
+            pass # use the default opener
+        else:
+            proxyDict = {}
+
+            if self._httpProxy:
+                proxyDict['http'] = self._httpProxy
+            if self._httpsProxy:
+                proxyDict['https'] = self._httpsProxy
+
+            proxyHandler = urllib.request.ProxyHandler(proxyDict)
+
+            newOpener = urllib.request.build_opener(proxyHandler)
+            urllib.request.install_opener(newOpener)
 
         self.httpURL = 'https://{0}/EWS/exchange.asmx'.format(server)
         print('self.httpURL=', self.httpURL)
@@ -375,6 +394,7 @@ class Exchange():
         self._Disconnected = func
 
     def _NewConnectionStatus(self, state):
+        print('378 _NewConnectionStatus(', state, ', self._connectionStatus=', self._connectionStatus)
         if state != self._connectionStatus:
             # the connection status has changed
             self._connectionStatus = state
@@ -409,7 +429,8 @@ class Exchange():
     def _UpdateFolderIdAndChangeKey(self):
         # Requests Service for ID of calendar folder and change key
         if self._soapHeader is None:
-            self._soapHeader = self._GetSoapHeader(self._impersonation)
+            #self._soapHeader = self._GetSoapHeader(self._impersonation)
+            self._soapHeader = self._GetSoapHeader(None)
 
         if self._startOfWeek is None:
             todayDT = datetime.date.today()
@@ -467,6 +488,10 @@ class Exchange():
                 self._folderID = matchFolderInfo.group(1)
                 self._changeKey = matchFolderInfo.group(2)
 
+    @property
+    def Impersonation(self, newImpersonation):
+        self._impersonation = newImpersonation
+
     def UpdateCalendar(self, calendar=None, startDT=None, endDT=None):
         # gets the latest data for this week from exchange and stores it
         # if calendar is not None, this will check another users calendar
@@ -490,17 +515,29 @@ class Exchange():
         emailRegex = re.compile('.*?\@.*?\..*?')
 
         if calendar is None:
-            parentFolder = '''
-                <m:ParentFolderIds>
-                    <t:FolderId Id="{}" ChangeKey="{}" />
-                </m:ParentFolderIds>
-                '''.format(
-                self._folderID,
-                self._changeKey
-            )
+            print('499 self._impersonation=', self._impersonation)
+            if self._impersonation is None:
+                parentFolder = '''
+                    <m:ParentFolderIds>
+                        <t:FolderId Id="{}" ChangeKey="{}" />
+                    </m:ParentFolderIds>
+                    '''.format(
+                    self._folderID,
+                    self._changeKey
+                )
+            else:
+                parentFolder = '''
+                    <m:ParentFolderIds>
+                        <t:DistinguishedFolderId Id="calendar">
+                          <t:Mailbox>
+                            <t:EmailAddress>{}</t:EmailAddress>
+                          </t:Mailbox>
+                        </t:DistinguishedFolderId>
+                      </m:ParentFolderIds>
+                    '''.format(self._impersonation)
 
         elif emailRegex.search(calendar) is not None:  # email address
-            print('emailRegex matched')
+            print('520 emailRegex matched')
             parentFolder = '''
                 <m:ParentFolderIds>
                     <t:DistinguishedFolderId Id="calendar">
@@ -511,7 +548,7 @@ class Exchange():
                   </m:ParentFolderIds>
                 '''.format(calendar)
         else:  # name
-            print('name')
+            print('531 name')
             parentFolder = '''
                 <m:ParentFolderIds>
                     <t:DistinguishedFolderId Id="calendar">
@@ -564,7 +601,7 @@ class Exchange():
             # do callbacks if something changes
 
             for exchangeItem in exchangeItems:
-                if not exchangeItem.Get('Subject').startswith('Canceled:'): # ignore cancelled items
+                if not exchangeItem.Get('Subject').startswith('Canceled:'):  # ignore cancelled items
                     selfItem = self.GetCalendarItemByID(exchangeItem.Get('ItemId'))
                     if selfItem is None:
                         # this is a new item do callback
@@ -591,7 +628,7 @@ class Exchange():
                             self._CalendarItemDeleted(self, selfItem)
 
         else:
-            raise Exception('UpdateCalendar failed. Check ProgramLog')
+            raise Exception('UpdateCalendar failed. Check ProgramLog. ' + str(response))
 
     def _CreateCalendarItemsFromResponse(self, response):
         '''
@@ -853,7 +890,8 @@ class Exchange():
         request = urllib.request.Request(self.httpURL, body, self.header, method='POST')
 
         try:
-            response = urllib.request.urlopen(request)
+            response = urllib.request.urlopen(request
+
             if response:
                 ret = response.read().decode()
                 print('655 _SendHttp ret=', ret)
