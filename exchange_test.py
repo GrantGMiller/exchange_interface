@@ -6,6 +6,8 @@ import exchange_interface
 exchange = exchange_interface.Exchange(
     username=exchange_credentials.username,
     password=exchange_credentials.password,
+    proxyAddress='172.17.16.79',
+    proxyPort='3128',
     # impersonation='mpower@extron.com'
 )
 

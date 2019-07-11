@@ -298,26 +298,28 @@ class Exchange:
                  password,
                  server='outlook.office365.com',
                  impersonation=None,
-                 httpProxy=None,
-                 httpsProxy=None,
+                 proxyAddress=None,
+                 proxyPort=None,
                  ):
 
-        self._httpProxy = httpProxy
-        self._httpsProxy = httpsProxy
+        self._proxyAddress = proxyAddress
+        self._proxyPort = proxyPort
 
-        if self._httpProxy is None and self._httpsProxy is None:
-            pass # use the default opener
-        else:
-            proxyDict = {}
-
-            if self._httpProxy:
-                proxyDict['http'] = self._httpProxy
-            if self._httpsProxy:
-                proxyDict['https'] = self._httpsProxy
-
-            proxyHandler = urllib.request.ProxyHandler(proxyDict)
-
-            newOpener = urllib.request.build_opener(proxyHandler)
+        if self._proxyAddress or self._proxyPort:
+            proxyHandler = urllib.request.ProxyHandler({
+                'http': 'http://{}:{}'.format(
+                    self._proxyAddress,
+                    self._proxyPort if self._proxyPort else '3128', #default proxy port is 3128
+                ),
+                'https': 'https://{}:{}'.format(
+                    self._proxyAddress,
+                    self._proxyPort if self._proxyPort else '3128', #default proxy port is 3128
+                ),
+            })
+            newOpener = urllib.request.build_opener(
+                proxyHandler,
+                urllib.request.ProxyBasicAuthHandler()
+            )
             urllib.request.install_opener(newOpener)
 
         self.httpURL = 'https://{0}/EWS/exchange.asmx'.format(server)
@@ -325,7 +327,7 @@ class Exchange:
         # self.httpURL = 'http://{0}/EWS/exchange.asmx'.format(server) #testing only
         self.encode = b64encode(bytes('{0}:{1}'.format(username, password), "ascii"))
         self.login = str(self.encode)[2:-1]
-        self._impersonation = impersonation
+        self._impersonation = impersonation if impersonation else None
         self.header = {
             'content-type': 'text/xml',
             'authorization': 'Basic {}'.format(self.login)
@@ -429,7 +431,7 @@ class Exchange:
     def _UpdateFolderIdAndChangeKey(self):
         # Requests Service for ID of calendar folder and change key
         if self._soapHeader is None:
-            #self._soapHeader = self._GetSoapHeader(self._impersonation)
+            # self._soapHeader = self._GetSoapHeader(self._impersonation)
             self._soapHeader = self._GetSoapHeader(None)
 
         if self._startOfWeek is None:
@@ -890,6 +892,7 @@ class Exchange:
         request = urllib.request.Request(self.httpURL, body, self.header, method='POST')
 
         try:
+            # response = urllib.request.urlopen(request)
             response = urllib.request.urlopen(request)
 
             if response:
