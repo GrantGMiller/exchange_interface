@@ -302,6 +302,9 @@ class Exchange:
                  proxyPort=None,
                  ):
 
+        self._username = username
+        self._password = password
+
         self._proxyAddress = proxyAddress
         self._proxyPort = proxyPort
 
@@ -904,6 +907,7 @@ class Exchange:
             self._NewConnectionStatus('Disconnected')
             print('_SendHttp Exception:\n', e, e.args)
             ProgramLog('exchange_interface.py Error:' + str(e), 'error')
+            oldPrint('username=', self._username, ', password[-3:]=', self._password)
             # raise e
 
     def GetAllEvents(self):
