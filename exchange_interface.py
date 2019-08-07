@@ -907,7 +907,7 @@ class Exchange:
             self._NewConnectionStatus('Disconnected')
             print('_SendHttp Exception:\n', e, e.args)
             ProgramLog('exchange_interface.py Error:' + str(e), 'error')
-            oldPrint('username=', self._username, ', password[-3:]=', self._password)
+            oldPrint('username=', self._username, ', password[-3:]=', self._password[-3:])
             # raise e
 
     def GetAllEvents(self):
