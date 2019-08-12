@@ -312,11 +312,11 @@ class Exchange:
             proxyHandler = urllib.request.ProxyHandler({
                 'http': 'http://{}:{}'.format(
                     self._proxyAddress,
-                    self._proxyPort if self._proxyPort else '3128', #default proxy port is 3128
+                    self._proxyPort if self._proxyPort else '3128',  # default proxy port is 3128
                 ),
                 'https': 'https://{}:{}'.format(
                     self._proxyAddress,
-                    self._proxyPort if self._proxyPort else '3128', #default proxy port is 3128
+                    self._proxyPort if self._proxyPort else '3128',  # default proxy port is 3128
                 ),
             })
             newOpener = urllib.request.build_opener(
