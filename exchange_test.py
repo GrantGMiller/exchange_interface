@@ -17,7 +17,7 @@ items = exchange.GetNextCalItems()
 
 
 def NewCallback(cal, item):
-    print('NewCallback(', cal, item)
+    print('NewCallback(', cal, dict(item))
 
 
 def ChangeCallback(cal, item):
