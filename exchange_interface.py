@@ -8,7 +8,7 @@ from base64 import b64encode, b64decode
 import datetime
 import time
 
-DEBUG = False
+DEBUG = True
 oldPrint = print
 if not DEBUG:
     print = lambda *a, **k: None
@@ -294,16 +294,22 @@ class _Attachment:
 class Exchange:
     # Exchange methods
     def __init__(self,
-                 username,
-                 password,
+                 username=None,
+                 password=None,
                  server='outlook.office365.com',
                  impersonation=None,
                  proxyAddress=None,
                  proxyPort=None,
+                 accessToken=None,
                  ):
 
         self._username = username
         self._password = password
+        self._accessToken = accessToken  # used for oauth
+
+        if accessToken is None:
+            if username is None or password is None:
+                raise PermissionError('Please provide a username/password or accessToken')
 
         self._proxyAddress = proxyAddress
         self._proxyPort = proxyPort
@@ -328,13 +334,19 @@ class Exchange:
         self.httpURL = 'https://{0}/EWS/exchange.asmx'.format(server)
         print('self.httpURL=', self.httpURL)
         # self.httpURL = 'http://{0}/EWS/exchange.asmx'.format(server) #testing only
-        self.encode = b64encode(bytes('{0}:{1}'.format(username, password), "ascii"))
+        self.encode = b64encode(bytes('{0}:{1}'.format(self._username, self._password), "ascii"))
         self.login = str(self.encode)[2:-1]
         self._impersonation = impersonation if impersonation else None
-        self.header = {
-            'content-type': 'text/xml',
-            'authorization': 'Basic {}'.format(self.login)
-        }
+        if self._accessToken:
+            self.header = {
+                'content-type': 'text/xml',
+                'authorization': 'Bearer {}'.format(self._accessToken)
+            }
+        else:
+            self.header = {
+                'content-type': 'text/xml',
+                'authorization': 'Basic {}'.format(self.login)
+            }
         self._calendarItems = []
 
         self._startOfWeek = None
@@ -633,6 +645,7 @@ class Exchange:
                             self._CalendarItemDeleted(self, selfItem)
 
         else:
+            oldPrint(response)
             raise Exception('UpdateCalendar failed. Check ProgramLog. ' + str(response))
 
     def _CreateCalendarItemsFromResponse(self, response):
@@ -892,6 +905,7 @@ class Exchange:
     def _SendHttp(self, body):
         print('647 _SendHttp body=', body)
         body = body.encode()
+        print('908 header=', self.header)
         request = urllib.request.Request(self.httpURL, body, self.header, method='POST')
 
         try:
@@ -907,7 +921,8 @@ class Exchange:
             self._NewConnectionStatus('Disconnected')
             print('_SendHttp Exception:\n', e, e.args)
             ProgramLog('exchange_interface.py Error:' + str(e), 'error')
-            oldPrint('username=', self._username, ', password[-3:]=', self._password[-3:])
+            if self._password:
+                oldPrint('username=', self._username, ', password[-3:]=', self._password[-3:])
             # raise e
 
     def GetAllEvents(self):
