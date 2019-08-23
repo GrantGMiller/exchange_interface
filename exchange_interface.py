@@ -8,7 +8,7 @@ from base64 import b64encode, b64decode
 import datetime
 import time
 
-DEBUG = True
+DEBUG = False
 oldPrint = print
 if not DEBUG:
     print = lambda *a, **k: None
@@ -300,16 +300,16 @@ class Exchange:
                  impersonation=None,
                  proxyAddress=None,
                  proxyPort=None,
-                 accessToken=None,
+                 accessTokenCallback=None,  # None or callback that accepts no params and returns an access token
                  ):
 
         self._username = username
         self._password = password
-        self._accessToken = accessToken  # used for oauth
+        self._accessTokenCallback = accessTokenCallback  # used for oauth
 
-        if accessToken is None:
+        if accessTokenCallback is None:
             if username is None or password is None:
-                raise PermissionError('Please provide a username/password or accessToken')
+                raise PermissionError('Please provide a username/password or accessTokenCallback')
 
         self._proxyAddress = proxyAddress
         self._proxyPort = proxyPort
@@ -337,10 +337,10 @@ class Exchange:
         self.encode = b64encode(bytes('{0}:{1}'.format(self._username, self._password), "ascii"))
         self.login = str(self.encode)[2:-1]
         self._impersonation = impersonation if impersonation else None
-        if self._accessToken:
+        if self._accessTokenCallback:
             self.header = {
                 'content-type': 'text/xml',
-                'authorization': 'Bearer {}'.format(self._accessToken)
+                'authorization': 'Bearer {}'.format(self._accessTokenCallback())
             }
         else:
             self.header = {
@@ -410,9 +410,9 @@ class Exchange:
     def Disconnected(self, func):
         self._Disconnected = func
 
-    def _NewConnectionStatus(self, state):
+    def _NewConnectionStatus(self, state, forceNotification=False):
         print('378 _NewConnectionStatus(', state, ', self._connectionStatus=', self._connectionStatus)
-        if state != self._connectionStatus:
+        if state != self._connectionStatus or forceNotification:
             # the connection status has changed
             self._connectionStatus = state
             if state == 'Connected':
@@ -646,6 +646,7 @@ class Exchange:
 
         else:
             oldPrint(response)
+            self._NewConnectionStatus('Disconnected', forceNotification=True)
             raise Exception('UpdateCalendar failed. Check ProgramLog. ' + str(response))
 
     def _CreateCalendarItemsFromResponse(self, response):
@@ -905,6 +906,15 @@ class Exchange:
     def _SendHttp(self, body):
         print('647 _SendHttp body=', body)
         body = body.encode()
+
+        # The access token needs to be "refreshed" periodically.
+        # The accessTokenCallback should return a valid token and refresh it if needed
+        if self._accessTokenCallback:
+            self.header = {
+                'content-type': 'text/xml',
+                'authorization': 'Bearer {}'.format(self._accessTokenCallback())
+            }
+
         print('908 header=', self.header)
         request = urllib.request.Request(self.httpURL, body, self.header, method='POST')
 
