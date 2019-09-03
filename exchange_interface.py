@@ -410,7 +410,7 @@ class Exchange:
     def Disconnected(self, func):
         self._Disconnected = func
 
-    def _NewConnectionStatus(self, state, forceNotification=False):
+    def _NewConnectionStatus(self, state, forceNotification=True):
         print('378 _NewConnectionStatus(', state, ', self._connectionStatus=', self._connectionStatus)
         if state != self._connectionStatus or forceNotification:
             # the connection status has changed
@@ -443,13 +443,8 @@ class Exchange:
                             </t:ExchangeImpersonation>""".format(replace)
         return xmlAccount
 
-    def _UpdateFolderIdAndChangeKey(self):
-        # Requests Service for ID of calendar folder and change key
-        if self._soapHeader is None:
-            # self._soapHeader = self._GetSoapHeader(self._impersonation)
-            self._soapHeader = self._GetSoapHeader(None)
-
-        if self._startOfWeek is None:
+    def _UpdateStartEndOfWeek(self):
+        if self._startOfWeek is None or self._endWeekDT < datetime.datetime.now():
             todayDT = datetime.date.today()
             weekday = todayDT.weekday()
             startWeekDT = todayDT - datetime.timedelta(days=weekday)
@@ -460,7 +455,7 @@ class Exchange:
             )
             self._startOfWeek = ConvertDatetimeToTimeString(startWeekDT)
 
-        if self._endOfWeek is None:
+        if self._endOfWeek is None or self._endWeekDT < datetime.datetime.now():
             todayDT = datetime.date.today()
             weekday = todayDT.weekday()
             endWeekDT = todayDT + datetime.timedelta(days=6 - weekday)
@@ -472,6 +467,14 @@ class Exchange:
                 minute=59,
             )
             self._endOfWeek = ConvertDatetimeToTimeString(endWeekDT)
+
+    def _UpdateFolderIdAndChangeKey(self):
+        # Requests Service for ID of calendar folder and change key
+        if self._soapHeader is None:
+            # self._soapHeader = self._GetSoapHeader(self._impersonation)
+            self._soapHeader = self._GetSoapHeader(None)
+
+        self._UpdateStartEndOfWeek()
 
         regExFolderInfo = re.compile(r't:FolderId Id=\"(.{1,})\" ChangeKey=\"(.{1,})\"\/')
 
