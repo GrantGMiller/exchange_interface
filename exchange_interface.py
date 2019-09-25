@@ -8,7 +8,7 @@ from base64 import b64encode, b64decode
 import datetime
 import time
 
-DEBUG = False
+DEBUG = True
 oldPrint = print
 if not DEBUG:
     print = lambda *a, **k: None
@@ -336,7 +336,7 @@ class Exchange:
         # self.httpURL = 'http://{0}/EWS/exchange.asmx'.format(server) #testing only
         self.encode = b64encode(bytes('{0}:{1}'.format(self._username, self._password), "ascii"))
         self.login = str(self.encode)[2:-1]
-        self._impersonation = impersonation if impersonation else None
+        self._impersonation = impersonation or None
         if self._accessTokenCallback:
             self.header = {
                 'content-type': 'text/xml',
@@ -433,14 +433,14 @@ class Exchange:
             # replace = '<t:PrincipalName>{0}</t:PrincipalName>'.format(emailAddress)
             # replace = '<t:SID>{0}</t:SID>'.format(emailAddress)
             # replace = '<t:PrimarySmtpAddress>{0}</t:PrimarySmtpAddress>'.format(emailAddress)
-            replace = '<t:SmtpAddress>{0}</t:SmtpAddress>'.format(emailAddress)
+            replace = '<SmtpAddress>{0}</SmtpAddress>'.format(emailAddress)
 
             xmlAccount = """<t:RequestServerVersion Version="Exchange2007_SP1" />
-                            <t:ExchangeImpersonation>
-                                <t:ConnectingSID>
+                            <ExchangeImpersonation>
+                                <ConnectingSID>
                                    {0}
-                                </t:ConnectingSID>
-                            </t:ExchangeImpersonation>""".format(replace)
+                                </ConnectingSID>
+                            </ExchangeImpersonation>""".format(replace)
         return xmlAccount
 
     def _UpdateStartEndOfWeek(self):
@@ -470,9 +470,7 @@ class Exchange:
 
     def _UpdateFolderIdAndChangeKey(self):
         # Requests Service for ID of calendar folder and change key
-        if self._soapHeader is None:
-            # self._soapHeader = self._GetSoapHeader(self._impersonation)
-            self._soapHeader = self._GetSoapHeader(None)
+        self._soapHeader = self._GetSoapHeader(self._impersonation)
 
         self._UpdateStartEndOfWeek()
 
@@ -509,6 +507,10 @@ class Exchange:
                 self._changeKey = matchFolderInfo.group(2)
 
     @property
+    def Impersonation(self):
+        return self._impersonation
+
+    @Impersonation.setter
     def Impersonation(self, newImpersonation):
         self._impersonation = newImpersonation
 
@@ -579,6 +581,7 @@ class Exchange:
                   </m:ParentFolderIds>
                 '''.format(calendar)
 
+        # Note: All FieldURI's located here: https://docs.microsoft.com/en-us/exchange/client-developer/web-service-reference/fielduri
         xmlbody = """<?xml version="1.0" encoding="utf-8"?>
                     <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                            xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
@@ -595,21 +598,29 @@ class Exchange:
                               <t:FieldURI FieldURI="item:Subject" />
                               <t:FieldURI FieldURI="calendar:Start" />
                               <t:FieldURI FieldURI="calendar:End" />
-                              <t:FieldURI FieldURI="calendar:Organizer">
-                              </t:FieldURI>
+                              <t:FieldURI FieldURI="calendar:Organizer"/>
                               <t:FieldURI FieldURI="item:HasAttachments" />
+                              
+                              <t:FieldURI FieldURI="item:Sensitivity" /> <!-- Private Meeting Flag -->
+                              
                             </t:AdditionalProperties>
                           </m:ItemShape>
-                          <m:CalendarView MaxEntriesReturned="100" StartDate="{1}" EndDate="{2}" />
-                          {3}
+                          <m:CalendarView 
+                            MaxEntriesReturned="100" 
+                            StartDate="{1}" 
+                            EndDate="{2}" />
+                            {3}
                         </m:FindItem>
+                        
+                        
+                        
                       </soap:Body>
                     </soap:Envelope>
                     """.format(
-            self._soapHeader,
-            startDTstring,
-            endDTstring,
-            parentFolder
+            self._soapHeader,  # 0
+            startDTstring,  # 1
+            endDTstring,  # 2
+            parentFolder  # 3
         )
 
         response = self._SendHttp(xmlbody)
@@ -932,7 +943,7 @@ class Exchange:
                 return ret
         except Exception as e:
             self._NewConnectionStatus('Disconnected')
-            print('_SendHttp Exception:\n', e, e.args)
+            print('_SendHttp Exception:\n', e, e.read())
             ProgramLog('exchange_interface.py Error:' + str(e), 'error')
             if self._password:
                 oldPrint('username=', self._username, ', password[-3:]=', self._password[-3:])
