@@ -943,7 +943,7 @@ class Exchange:
                 return ret
         except Exception as e:
             self._NewConnectionStatus('Disconnected')
-            print('_SendHttp Exception:\n', e, e.read())
+            print('_SendHttp Exception:\n', e)
             ProgramLog('exchange_interface.py Error:' + str(e), 'error')
             if self._password:
                 oldPrint('username=', self._username, ', password[-3:]=', self._password[-3:])
