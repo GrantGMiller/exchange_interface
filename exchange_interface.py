@@ -581,7 +581,8 @@ class Exchange:
                   </m:ParentFolderIds>
                 '''.format(calendar)
 
-        # Note: All FieldURI's located here: https://docs.microsoft.com/en-us/exchange/client-developer/web-service-reference/fielduri
+        # Note: All FieldURI's located here:
+        # https://docs.microsoft.com/en-us/exchange/client-developer/web-service-reference/fielduri
         xmlbody = """<?xml version="1.0" encoding="utf-8"?>
                     <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                            xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
@@ -596,12 +597,18 @@ class Exchange:
                             <t:BaseShape>IdOnly</t:BaseShape>
                             <t:AdditionalProperties>
                               <t:FieldURI FieldURI="item:Subject" />
+                              
                               <t:FieldURI FieldURI="calendar:Start" />
                               <t:FieldURI FieldURI="calendar:End" />
                               <t:FieldURI FieldURI="calendar:Organizer"/>
+                              
+                              <t:FieldURI FieldURI="calendar:RequiredAttendees" /> 
+                              <t:FieldURI FieldURI="calendar:OptionalAttendees" /> 
+                              
                               <t:FieldURI FieldURI="item:HasAttachments" />
                               
                               <t:FieldURI FieldURI="item:Sensitivity" /> <!-- Private Meeting Flag -->
+                              
                               
                             </t:AdditionalProperties>
                           </m:ItemShape>
