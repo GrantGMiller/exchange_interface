@@ -10,9 +10,9 @@ exchange = exchange_interface.Exchange(
 #     endDT=datetime.datetime(year=2019, month=3, day=11),
 # )
 item = exchange.GetItem(
-    'AAMkADkzMzBkZDQ5LTBlYjYtNDM1Yy05MjgwLTA0OTU0MDJiMTU1ZQBGAAAAAAAlV3FfZvuWS4G0Ngplked/BwDH6imC4of+QY0K3wQH6l6QAJ3UpDxVAABDb8fIgOIhSab0Z/mFRldyAAKMf7/dAAA='
+    'AAMkADkzMzBkZDQ5LTBlYjYtNDM1Yy05MjgwLTA0OTU0MDJiMTU1ZQBGAAAAAAAlV3FfZvuWS4G0Ngplked/BwDH6imC4of+QY0K3wQH6l6QAJ3UpDxVAABDb8fIgOIhSab0Z/mFRldyAAN7mcqQAAA='
 )
 
 print('item=', item)
 
-exchange.DeleteEvent(item)
+# exchange.DeleteEvent(item)

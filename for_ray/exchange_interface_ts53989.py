@@ -8,7 +8,7 @@ from base64 import b64encode, b64decode
 import datetime
 import time
 
-DEBUG = True
+DEBUG = False
 oldPrint = print
 if not DEBUG:
     print = lambda *a, **k: None
@@ -34,7 +34,7 @@ elif TZ_NAME == 'CST':
 print('MY_TIME_ZONE= UTC {}'.format(MY_TIME_ZONE))
 print('CURRENT SYSTEM TIME=', time.asctime())
 
-RE_CAL_ITEM = re.compile('<t:CalendarItem>[\w\W]*?<\/t:CalendarItem>')
+RE_CAL_ITEM = re.compile('<t:CalendarItem>.*?<\/t:CalendarItem>')
 RE_ITEM_ID = re.compile(
     '<t:ItemId Id="(.*?)" ChangeKey="(.*?)"/>')  # group(1) = itemID, group(2) = changeKey #within a CalendarItem
 RE_SUBJECT = re.compile('<t:Subject>(.*?)</t:Subject>')  # within a CalendarItem
@@ -43,7 +43,6 @@ RE_ORGANIZER = re.compile(
     '<t:Organizer>.*<t:Name>(.*?)</t:Name>.*</t:Organizer>')  # group(1)=Name #within a CalendarItem
 RE_START_TIME = re.compile('<t:Start>(.*?)</t:Start>')  # group(1) = start time string #within a CalendarItem
 RE_END_TIME = re.compile('<t:End>(.*?)</t:End>')  # group(1) = end time string #within a CalendarItem
-RE_HTML_BODY = re.compile('<t:Body BodyType="HTML">([\w\W]*)</t:Body>', re.IGNORECASE)
 
 
 def ConvertTimeStringToDatetime(string):
@@ -120,19 +119,16 @@ class _CalendarItem:
         duration = delta.total_seconds()
         self.AddData('Duration', duration)
 
-    def Get(self, key, default=None):
+    def Get(self, key):
         if key == 'Start':
             return self._startDT
         elif key == 'End':
             return self._endDT
         elif key == 'Duration':
             self._CalculateDuration()
-            return self._data.get(key, default)
-        elif key == 'Body':
-            self._UpdateFromServer()
-            return self._data.get(key, default)
+            return self._data.get(key, None)
         else:
-            return self._data.get(key, default)
+            return self._data.get(key, None)
 
     def get(self, key):
         return self.Get(key)
@@ -190,13 +186,6 @@ class _CalendarItem:
                 return False
 
         return False
-
-    def Update(self, key, value):
-        if key == 'Body':
-            self._parentExchange.ChangeEventBody(self, value)
-            self._UpdateFromServer()
-        else:
-            raise Exception('Only "Body" can be updated at this time')
 
     @property
     def Data(self):
@@ -267,11 +256,6 @@ class _CalendarItem:
 
         else:
             raise TypeError('unorderable types: {} < {}'.format(self, other))
-
-    def _UpdateFromServer(self):
-        calItem = self._parentExchange.GetItem(self.Get('ItemId'))
-        self._parentExchange.RegisterCalendarItem(calItem)
-        self._data.update(dict(calItem))
 
 
 class _Attachment:
@@ -616,16 +600,7 @@ class Exchange:
                               
                               <t:FieldURI FieldURI="calendar:Start" />
                               <t:FieldURI FieldURI="calendar:End" />
-                              
-                              <t:FieldURI FieldURI="item:Body" />
-                                <!--
-                                <t:FieldURI FieldURI="item:NormalizedBody" />
-                                <t:FieldURI FieldURI="item:UniqueBody" />
-                                <t:FieldURI FieldURI="item:TextBody" />
-                                -->
-                              
                               <t:FieldURI FieldURI="calendar:Organizer"/>
-                            
                               
                               <t:FieldURI FieldURI="calendar:RequiredAttendees" /> 
                               <t:FieldURI FieldURI="calendar:OptionalAttendees" /> 
@@ -703,7 +678,6 @@ class Exchange:
         '''
         ret = []
         for matchCalItem in RE_CAL_ITEM.finditer(response):
-            print('matchCalItem=', matchCalItem)
             # go thru the resposne and find any CalendarItems.
             # parse their data and create CalendarItem objects
             # store CalendarItem objects in self
@@ -719,11 +693,6 @@ class Exchange:
             data['ChangeKey'] = matchItemId.group(2)
             data['Subject'] = RE_SUBJECT.search(matchCalItem.group(0)).group(1)
             data['OrganizerName'] = RE_ORGANIZER.search(matchCalItem.group(0)).group(1)
-
-            bodyMatch = RE_HTML_BODY.search(matchCalItem.group(0))
-            if bodyMatch:
-                print('bodyMatch=', bodyMatch)
-                data['Body'] = bodyMatch.group(1)
 
             res = RE_HAS_ATTACHMENTS.search(matchCalItem.group(0)).group(1)
             if 'true' in res:
@@ -744,11 +713,10 @@ class Exchange:
 
         return ret
 
-    def RegisterCalendarItem(self, calItem):
+    def _AddCalendarItem(self, calItem):
         '''
         This method will add the calendar item to self._calendarItems
         Making sure it is not duplicated and replacing any old data with new data
-        Applicable callbacks will be executed
         :param calItem:
         :return:
         '''
@@ -766,12 +734,6 @@ class Exchange:
 
         for sub_calItem in self._calendarItems.copy():
             if sub_calItem.Get('ItemId') == itemId:
-
-                if sub_calItem != calItem:
-                    # something has changed about this item, do callback
-                    if self.CalendarItemChanged:
-                        self.CalendarItemChanged(self, calItem)
-
                 self._calendarItems.remove(sub_calItem)
 
         # Add CalItem to self
@@ -797,7 +759,6 @@ class Exchange:
                             <t:CalendarItem>
                               <t:Subject>{1}</t:Subject>
                               <t:Body BodyType="HTML">{2}</t:Body>
-                              <t:Body BodyType="Text">{2}</t:Body>
                               <t:Start>{3}</t:Start>
                               <t:End>{4}</t:End>
                               <t:MeetingTimeZone TimeZoneName="{5}" />
@@ -860,42 +821,6 @@ class Exchange:
                       </soap:Body>
                     </soap:Envelope> """.format(self._soapHeader, calItem.Get('ItemId'), calItem.Get('ChangeKey'),
                                                 timeUpdateXML)
-
-        self._SendHttp(xmlBody)
-
-    def ChangeEventBody(self, calItem, newBody):
-        print('ChangeEventBody(', calItem, newBody)
-
-        xmlBody = """<?xml version="1.0" encoding="utf-8"?>
-                    <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
-                           xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-                      <soap:Header>
-                        {0}
-                      </soap:Header>
-                      <soap:Body>
-                        <m:UpdateItem MessageDisposition="SaveOnly" ConflictResolution="AlwaysOverwrite" SendMeetingInvitationsOrCancellations="SendToNone">
-                          <m:ItemChanges>
-                            <t:ItemChange>
-                              <t:ItemId Id="{1}" ChangeKey="{2}" />
-                              <t:Updates>
-                                <t:SetItemField>
-                                  <t:FieldURI FieldURI="item:Body" />
-                                  <t:CalendarItem>
-                                    <t:Body BodyType="HTML">{3}</t:Body>
-                                    <t:Body BodyType="Text">{3}</t:Body>
-                                  </t:CalendarItem>
-                                </t:SetItemField>
-                              </t:Updates>
-                            </t:ItemChange>
-                          </m:ItemChanges>
-                        </m:UpdateItem>
-                      </soap:Body>
-                    </soap:Envelope> """.format(
-            self._soapHeader,
-            calItem.Get('ItemId'),
-            calItem.Get('ChangeKey'),
-            newBody
-        )
 
         self._SendHttp(xmlBody)
 
@@ -1109,15 +1034,13 @@ class Exchange:
                                       <m:ItemShape>
                                         <t:BaseShape>IdOnly</t:BaseShape>
                                         <t:AdditionalProperties>
-                                            <t:FieldURI FieldURI="item:Subject" />
-                                            <t:FieldURI FieldURI="calendar:Start" />
-                                            <t:FieldURI FieldURI="calendar:End" />
-                                            <t:FieldURI FieldURI="calendar:Organizer"/>
-                                            
-                                            
-                                            <t:FieldURI FieldURI="item:Body" />
-                                            
-                                            <t:FieldURI FieldURI="item:HasAttachments" />
+                                        <t:FieldURI FieldURI="item:Subject" />
+                                          <t:FieldURI FieldURI="item:Subject" />
+                                          <t:FieldURI FieldURI="calendar:Start" />
+                                          <t:FieldURI FieldURI="calendar:End" />
+                                          <t:FieldURI FieldURI="calendar:Organizer">
+                                          </t:FieldURI>
+                                          <t:FieldURI FieldURI="item:HasAttachments" />
                                         </t:AdditionalProperties>
                                       </m:ItemShape>
                                       <m:ItemIds>
@@ -1132,21 +1055,22 @@ class Exchange:
         response = self._SendHttp(xmlBody)
         calItems = self._CreateCalendarItemsFromResponse(response)
         print('792 calItems=', calItems)
-        return calItems[0] if calItems else None
+        return calItems[0]
 
 
 if __name__ == '__main__':
 
     exchange = Exchange(
-        username='z-touchpanelno-confrm1.11@extron.com',  # working
-        password='Extron1025',
+        username='NIDA3WFNConference@nih.gov',  # working
+        password='Summertime2020!',
+        impersonation='NIDA-3WFN-HR-03C44@nih.gov'
     )
 
     exchange.Connected = lambda _, state: oldPrint('Exchange', state)
     exchange.Disconnected = lambda _, state: oldPrint('Exchange', state)
-    exchange.NewCalendarItem = lambda _, item: oldPrint('NewCalendarItem', item)
-    exchange.CalendarItemChanged = lambda _, item: oldPrint('CalendarItemChanged', item)
-    exchange.CalendarItemDeleted = lambda _, item: oldPrint('CalendarItemDeleted', item)
+    exchange.NewCalendarItem = lambda _, state: oldPrint('NewCalendarItem', state)
+    exchange.CalendarItemChanged = lambda _, state: oldPrint('CalendarItemChanged', state)
+    exchange.CalendarItemDeleted = lambda _, state: oldPrint('CalendarItemDeleted', state)
 
     while True:
         oldPrint('UpdateCalendar()')
