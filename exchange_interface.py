@@ -8,7 +8,7 @@ from base64 import b64encode, b64decode
 import datetime
 import time
 
-DEBUG = True
+DEBUG = False
 oldPrint = print
 if not DEBUG:
     print = lambda *a, **k: None
