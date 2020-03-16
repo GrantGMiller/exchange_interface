@@ -196,7 +196,7 @@ class _CalendarItem:
             self._parentExchange.ChangeEventBody(self, value)
             self._UpdateFromServer()
         else:
-            raise Exception('Only "Body" can be updated at this time')
+            raise KeyError('Only "Body" can be updated at this time')
 
     @property
     def Data(self):
