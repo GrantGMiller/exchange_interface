@@ -5,9 +5,9 @@ import creds as exchange_credentials
 import exchange_interface
 
 exchange = exchange_interface.Exchange(
-    # username=exchange_credentials.username,
-    # password=exchange_credentials.password,
-    # impersonation='rnchallwaysignage1@extron.com'
+    username=exchange_credentials.username,
+    password=exchange_credentials.password,
+    # impersonation='rnchallwaysignage1@extron.com',
 
     # proxyAddress='172.17.16.79',
     # proxyPort='3128',
@@ -20,8 +20,8 @@ exchange = exchange_interface.Exchange(
     # password='Winter2020!',
     # impersonation='CA_Galaxy_TOR_Pelee@fresenius-kabi.com'
 
-    username='z-touchpanelno-confrm1.9@extron.com',
-    password='Extron1025'
+    # username='z-touchpanelno-confrm1.9@extron.com',
+    # password='Extron1025'
 )
 
 
