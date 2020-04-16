@@ -9,7 +9,7 @@ import datetime
 import time
 import requests
 
-DEBUG = True
+DEBUG = False
 oldPrint = print
 if not DEBUG:
     print = lambda *a, **k: None
@@ -1348,10 +1348,10 @@ class Exchange:
 
 
 if __name__ == '__main__':
-
+    import creds
     exchange = Exchange(
-        username='z-touchpanelno-confrm1.11@extron.com',  # working
-        password='Extron1025',
+        username=creds.username,
+        password=creds.password
     )
 
     exchange.Connected = lambda _, state: oldPrint('Exchange', state)
