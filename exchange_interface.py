@@ -7,8 +7,9 @@ import urllib.request, re
 from base64 import b64encode, b64decode
 import datetime
 import time
+import requests
 
-DEBUG = False
+DEBUG = True
 oldPrint = print
 if not DEBUG:
     print = lambda *a, **k: None
@@ -44,6 +45,8 @@ RE_ORGANIZER = re.compile(
 RE_START_TIME = re.compile('<t:Start>(.*?)</t:Start>')  # group(1) = start time string #within a CalendarItem
 RE_END_TIME = re.compile('<t:End>(.*?)</t:End>')  # group(1) = end time string #within a CalendarItem
 RE_HTML_BODY = re.compile('<t:Body BodyType="HTML">([\w\W]*)</t:Body>', re.IGNORECASE)
+
+RE_EMAIL_ADDRESS = re.compile('.*?\@.*?\..*?')
 
 
 def ConvertTimeStringToDatetime(string):
@@ -347,7 +350,10 @@ class Exchange:
             )
             urllib.request.install_opener(newOpener)
 
-        self.httpURL = 'https://{0}/EWS/exchange.asmx'.format(server)
+        self.httpURL = 'https://{0}/EWS/exchange.asmx?email={1}'.format(
+            server,
+            impersonation or username
+        )
         print('self.httpURL=', self.httpURL)
         # self.httpURL = 'http://{0}/EWS/exchange.asmx'.format(server) #testing only
         self.encode = b64encode(bytes('{0}:{1}'.format(self._username, self._password), "ascii"))
@@ -442,14 +448,16 @@ class Exchange:
     # --------------------------------------------------EWS Services--------------------------------------------------------
     # ----------------------------------------------------------------------------------------------------------------------
     def _GetSoapHeader(self, emailAddress):
-        # This should only need to be called once to create the header that will be used in the XML request from now on
+        # This should only need to be called once to findMode the header that will be used in the XML request from now on
         if emailAddress is None:
             xmlAccount = """<t:RequestServerVersion Version="Exchange2007_SP1" />"""
         else:
             # replace = '<t:PrincipalName>{0}</t:PrincipalName>'.format(emailAddress)
             # replace = '<t:SID>{0}</t:SID>'.format(emailAddress)
             # replace = '<t:PrimarySmtpAddress>{0}</t:PrimarySmtpAddress>'.format(emailAddress)
-            replace = '<SmtpAddress>{0}</SmtpAddress>'.format(emailAddress)
+            replace = '<t:SmtpAddress>{0}</t:SmtpAddress>'.format(emailAddress)
+
+            # more info on impersonation at this link: https://docs.microsoft.com/en-us/exchange/client-developer/exchange-web-services/how-to-add-appointments-by-using-exchange-impersonation
 
             xmlAccount = """<t:RequestServerVersion Version="Exchange2007_SP1" />
                             <ExchangeImpersonation>
@@ -504,10 +512,30 @@ class Exchange:
                         <m:GetFolder>
                           <m:FolderShape>
                             <t:BaseShape>IdOnly</t:BaseShape>
+                            
+                            <t:AdditionalProperties>
+                                <t:FieldURI FieldURI="folder:DisplayName" />
+                                <t:FieldURI FieldURI="folder:ParentFolderId" />
+                                
+                                <t:FieldURI FieldURI="folder:FolderId" />
+                                <t:FieldURI FieldURI="folder:ParentFolderId" />
+                                <t:FieldURI FieldURI="folder:DisplayName" />
+                                <t:FieldURI FieldURI="folder:TotalCount" />
+                                <t:FieldURI FieldURI="folder:ChildFolderCount" />
+                                <t:FieldURI FieldURI="folder:FolderClass" />
+                                <t:FieldURI FieldURI="folder:ManagedFolderInformation" />
+                                <t:FieldURI FieldURI="folder:PermissionSet" />
+                                <t:FieldURI FieldURI="folder:EffectiveRights" />
+                                <t:FieldURI FieldURI="folder:SharingEffectiveRights" />
+                                
+                            </t:AdditionalProperties>
+                            
                           </m:FolderShape>
+                          
                           <m:FolderIds>
                             <t:DistinguishedFolderId Id="calendar" />
                           </m:FolderIds>
+                          
                         </m:GetFolder>
                       </soap:Body>
                     </soap:Envelope>""".format(self._soapHeader)
@@ -521,6 +549,8 @@ class Exchange:
             if matchFolderInfo:
                 self._folderID = matchFolderInfo.group(1)
                 self._changeKey = matchFolderInfo.group(2)
+                print('526 _folderID=', self._folderID)
+                print('527 _changeKey=', self._changeKey)
 
     @property
     def Impersonation(self):
@@ -530,7 +560,78 @@ class Exchange:
     def Impersonation(self, newImpersonation):
         self._impersonation = newImpersonation
 
+    def _GetParentFolderTag(self, calendar=None, mode='find'):
+        print('_GetParentFolderTag(', calendar, mode)
+        calendar = calendar or self._impersonation or None
+
+        if calendar is None:
+            if self._impersonation is None:
+                parentFolder = '''
+                    <m:ParentFolderIds>
+                        <t:FolderId Id="{}" ChangeKey="{}" />
+                    </m:ParentFolderIds>
+                    '''.format(
+                    self._folderID,
+                    self._changeKey
+                )
+            else:
+                parentFolder = '''
+                    <m:ParentFolderIds>
+                        <t:DistinguishedFolderId Id="calendar">
+                          <t:Mailbox>
+                            <t:SmtpAddress>{}</t:SmtpAddress>
+                          </t:Mailbox>
+                        </t:DistinguishedFolderId>
+                      </m:ParentFolderIds>
+                    '''.format(self._impersonation)
+
+        elif RE_EMAIL_ADDRESS.search(calendar) is not None:  # email address
+            print('520 emailRegex matched')
+
+            if mode == 'find':
+                parentFolder = '''
+                    <m:ParentFolderIds>
+                        <t:DistinguishedFolderId Id="calendar">
+                          <t:Mailbox>
+                            <t:EmailAddress>{}</t:EmailAddress>
+                          </t:Mailbox>
+                        </t:DistinguishedFolderId>
+                      </m:ParentFolderIds>
+                    '''.format(calendar)
+            elif mode == 'create':
+                parentFolder = '''
+                    <m:ParentFolderId>
+                        <t:DistinguishedFolderId Id="{}" ChangeKey="{}">
+                          <t:Mailbox>
+                            <t:SmtpAddress>{}</t:SmtpAddress>
+                          </t:Mailbox>
+                        </t:DistinguishedFolderId>
+                      </m:ParentFolderId>
+                    '''.format(
+                    self._folderID,
+                    self._changeKey,
+                    calendar
+                )
+        else:  # name
+            print('531 name')
+            parentFolder = '''
+                <m:ParentFolderIds>
+                    <t:DistinguishedFolderId Id="calendar">
+                      <t:Mailbox>
+                        <t:Name>{}</t:Name>
+                      </t:Mailbox>
+                    </t:DistinguishedFolderId>
+                  </m:ParentFolderIds>
+                '''.format(calendar)
+        print('581 parentFolder=', parentFolder)
+        return parentFolder
+
     def UpdateCalendar(self, calendar=None, startDT=None, endDT=None):
+        print('UpdateCalendar(', calendar, startDT, endDT)
+        # see all <CalendarItem> options here: https://docs.microsoft.com/en-us/exchange/client-developer/web-service-reference/calendaritem
+
+        # FieldURI's : https://docs.microsoft.com/en-us/exchange/client-developer/web-service-reference/fielduri
+
         # gets the latest data for this week from exchange and stores it
         # if calendar is not None, this will check another users calendar
         # if calendar is None, it will check your own calendar
@@ -550,52 +651,7 @@ class Exchange:
         if self._endWeekDT < datetime.datetime.now():
             self._UpdateFolderIdAndChangeKey()
 
-        emailRegex = re.compile('.*?\@.*?\..*?')
-
-        if calendar is None:
-            print('499 self._impersonation=', self._impersonation)
-            if self._impersonation is None:
-                parentFolder = '''
-                    <m:ParentFolderIds>
-                        <t:FolderId Id="{}" ChangeKey="{}" />
-                    </m:ParentFolderIds>
-                    '''.format(
-                    self._folderID,
-                    self._changeKey
-                )
-            else:
-                parentFolder = '''
-                    <m:ParentFolderIds>
-                        <t:DistinguishedFolderId Id="calendar">
-                          <t:Mailbox>
-                            <t:EmailAddress>{}</t:EmailAddress>
-                          </t:Mailbox>
-                        </t:DistinguishedFolderId>
-                      </m:ParentFolderIds>
-                    '''.format(self._impersonation)
-
-        elif emailRegex.search(calendar) is not None:  # email address
-            print('520 emailRegex matched')
-            parentFolder = '''
-                <m:ParentFolderIds>
-                    <t:DistinguishedFolderId Id="calendar">
-                      <t:Mailbox>
-                        <t:EmailAddress>{}</t:EmailAddress>
-                      </t:Mailbox>
-                    </t:DistinguishedFolderId>
-                  </m:ParentFolderIds>
-                '''.format(calendar)
-        else:  # name
-            print('531 name')
-            parentFolder = '''
-                <m:ParentFolderIds>
-                    <t:DistinguishedFolderId Id="calendar">
-                      <t:Mailbox>
-                        <t:Name>{}</t:Name>
-                      </t:Mailbox>
-                    </t:DistinguishedFolderId>
-                  </m:ParentFolderIds>
-                '''.format(calendar)
+        parentFolder = self._GetParentFolderTag(calendar)
 
         # Note: All FieldURI's located here:
         # https://docs.microsoft.com/en-us/exchange/client-developer/web-service-reference/fielduri
@@ -633,6 +689,7 @@ class Exchange:
                               <t:FieldURI FieldURI="item:HasAttachments" />
                               
                               <t:FieldURI FieldURI="item:Sensitivity" /> <!-- Private Meeting Flag -->
+                              
                               
                               
                             </t:AdditionalProperties>
@@ -705,7 +762,7 @@ class Exchange:
         for matchCalItem in RE_CAL_ITEM.finditer(response):
             print('matchCalItem=', matchCalItem)
             # go thru the resposne and find any CalendarItems.
-            # parse their data and create CalendarItem objects
+            # parse their data and findMode CalendarItem objects
             # store CalendarItem objects in self
 
             # print('\nmatchCalItem.group(0)=', matchCalItem.group(0))
@@ -792,7 +849,10 @@ class Exchange:
                         {0}
                       </soap:Header>
                       <soap:Body>
-                        <m:CreateItem SendMeetingInvitations="SendToNone">
+                        <!-- see link: https://docs.microsoft.com/en-us/dotnet/api/microsoft.exchange.webservices.data.sendinvitationsmode?view=exchange-ews-api -->
+                        <m:CreateItem SendMeetingInvitations="SendOnlyToAll">
+                        <!--<m:CreateItem SendMeetingInvitations="SendToAllAndSaveCopy">-->
+                        <!--<m:CreateItem SendMeetingInvitations="SendToNone">-->
                           <m:Items>
                             <t:CalendarItem>
                               <t:Subject>{1}</t:Subject>
@@ -801,6 +861,36 @@ class Exchange:
                               <t:Start>{3}</t:Start>
                               <t:End>{4}</t:End>
                               <t:MeetingTimeZone TimeZoneName="{5}" />
+                              
+                              <!-- Add an attendee, needed for the impersonation room to accept the meeting into their calendar -->
+                              <!--
+                              <t:Location>{6}</t:Location>
+                              <t:RequiredAttendees>
+                                <t:Attendee>
+                                    <t:Mailbox>
+                                        <t:EmailAddress>{6}</t:EmailAddress>
+                                    </t:Mailbox>
+                                </t:Attendee>
+                                HTTPretty   
+                              </t:RequiredAttendees>
+                              
+                              
+                              <t:Resources>
+                                <t:Attendee>
+                                    <t:Mailbox>
+                                        <t:EmailAddress>{6}</t:EmailAddress>
+                                    </t:Mailbox>
+                                </t:Attendee>
+                            </t:Resources>
+                            
+                            -->
+                            <!-- nope dont work -->
+                            <Organizer>
+                                <t:Mailbox>
+                                    <t:EmailAddress>{6}</t:EmailAddress>
+                                </t:Mailbox>
+                            </Organizer>
+                              
                             </t:CalendarItem>
                           </m:Items>
                         </m:CreateItem>
@@ -811,10 +901,125 @@ class Exchange:
             body,
             startTimeString,
             endTimeString,
-            TZ_NAME
+            TZ_NAME,
+            self._impersonation
         )
 
         self._SendHttp(xmlBody)
+
+    def _FindFolder(self, calendar=None):
+        calendar = calendar or self._impersonation
+        xml = '''<?xml version="1.0" encoding="utf-8"?>
+        <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+          <soap:Header>
+            {0}
+          </soap:Header>
+          <soap:Body>
+            <m:FindFolder Traversal="Shallow" xmlns="https://schemas.microsoft.com/exchange/services/2006/messages">
+                <m:FolderShape>
+                    <t:BaseShape>Default</t:BaseShape>
+                     <t:AdditionalProperties>
+                        <t:FieldURI FieldURI="folder:DisplayName" />
+                        <t:FieldURI FieldURI="folder:ParentFolderId" />
+                        
+                        <t:FieldURI FieldURI="folder:FolderId" />
+                        <t:FieldURI FieldURI="folder:ParentFolderId" />
+                        <t:FieldURI FieldURI="folder:DisplayName" />
+                        <t:FieldURI FieldURI="folder:TotalCount" />
+                        <t:FieldURI FieldURI="folder:ChildFolderCount" />
+                        <t:FieldURI FieldURI="folder:FolderClass" />
+                        <t:FieldURI FieldURI="folder:ManagedFolderInformation" />
+                        <t:FieldURI FieldURI="folder:PermissionSet" />
+                        <t:FieldURI FieldURI="folder:EffectiveRights" />
+                        <t:FieldURI FieldURI="folder:SharingEffectiveRights" />
+                        
+                    </t:AdditionalProperties>
+                </m:FolderShape>
+               <m:ParentFolderIds>
+                <t:DistinguishedFolderId Id="calendar"/>
+              </m:ParentFolderIds>
+            </m:FindFolder>
+          </soap:Body>
+        </soap:Envelope>    
+        '''.format(self._soapHeader)
+
+        resp = self._SendHttp_requests(xml)
+        print('947 resp=', resp)
+
+    def _SendHttp_requests(self, body):
+        resp = requests.post(
+            url=self.httpURL,
+            headers={
+                'content-type': 'text/xml',
+                'authorization': 'Bearer {}'.format(self._accessTokenCallback())
+            },
+            data=body,
+        )
+        print('body=\r\n', body)
+        print('resp.text=', resp.text)
+        print('resp.status_code=', resp.status_code)
+        print('resp.reason=', resp.reason)
+
+        ret = resp.text
+        print('965 ret=', ret)
+        return ret
+
+    def CreateMeeting(self, subject, body, startDT=None, endDT=None):
+        # https://docs.microsoft.com/en-us/exchange/client-developer/exchange-web-services/how-to-access-a-calendar-as-a-delegate-by-using-ews-in-exchange
+        # https://docs.microsoft.com/en-us/exchange/client-developer/exchange-web-services/how-to-access-a-calendar-as-a-delegate-by-using-ews-in-exchange
+        print('CreateMeeting(', subject, body, startDT, endDT)
+
+        startTimeString = ConvertDatetimeToTimeString(startDT)
+        endTimeString = ConvertDatetimeToTimeString(endDT)
+
+        xmlBody = """<?xml version="1.0" encoding="utf-8"?>
+            <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                    xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+                    xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+                    xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+                <soap:Header>
+                    {0}
+                </soap:Header>
+                <soap:Body>
+                    <!-- see link: https://docs.microsoft.com/en-us/dotnet/api/microsoft.exchange.webservices.data.sendinvitationsmode?view=exchange-ews-api -->
+                    
+                    <m:CreateItem SendMeetingInvitations="SendOnlyToAll">
+                    <!--<m:CreateItem SendMeetingInvitations="SendToAllAndSaveCopy">-->
+                    <!--<m:CreateItem SendMeetingInvitations="SendToNone">-->
+                    
+                        <m:SavedItemFolderId>
+                            <t:DistinguishedFolderId Id="calendar"/>
+                            <t:Mailbox>
+                                <t:EmailAddress>{6}</t:EmailAddress>
+                            </t:Mailbox>
+                        </m:SavedItemFolderId>
+                        
+                        <m:Items>
+                            <t:CalendarItem>
+                                <t:Subject>{1}</t:Subject>
+                                <t:Start>{3}</t:Start>
+                                <t:End>{4}</t:End>
+                                <t:MeetingTimeZone TimeZoneName="{5}" />
+                                
+                            </t:CalendarItem>
+                        </m:Items>
+                    </m:CreateItem>
+                </soap:Body>
+            </soap:Envelope>""".format(
+            self._soapHeader,
+            subject,
+            body,
+            startTimeString,
+            endTimeString,
+            TZ_NAME,
+            self._impersonation,  # 6
+            '',  # self._GetParentFolderTag(self._impersonation, mode='create')
+        )
+
+        self._SendHttp_requests(xmlBody)
 
     def GetCalendarItemByID(self, itemId):
         for calItem in self._calendarItems:
@@ -851,6 +1056,7 @@ class Exchange:
                                   <t:FieldURI FieldURI="calendar:End" />
                                   <t:CalendarItem>
                                     <t:End>{3}</t:End>
+                                    <t:EndTimeZone>{3}</t:EndTimeZone>
                                   </t:CalendarItem>
                                 </t:SetItemField>
                               </t:Updates>
@@ -858,8 +1064,14 @@ class Exchange:
                           </m:ItemChanges>
                         </m:UpdateItem>
                       </soap:Body>
-                    </soap:Envelope> """.format(self._soapHeader, calItem.Get('ItemId'), calItem.Get('ChangeKey'),
-                                                timeUpdateXML)
+                    </soap:Envelope> """.format(
+            self._soapHeader,
+            calItem.Get('ItemId'),
+            calItem.Get('ChangeKey'),
+            timeUpdateXML,
+            TZ_NAME
+
+        )
 
         self._SendHttp(xmlBody)
 
