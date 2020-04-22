@@ -9,7 +9,7 @@ import datetime
 import time
 import requests
 
-DEBUG = False
+DEBUG = True
 oldPrint = print
 if not DEBUG:
     print = lambda *a, **k: None
@@ -350,10 +350,7 @@ class Exchange:
             )
             urllib.request.install_opener(newOpener)
 
-        self.httpURL = 'https://{0}/EWS/exchange.asmx?email={1}'.format(
-            server,
-            impersonation or username
-        )
+        self.httpURL = 'https://{0}/EWS/exchange.asmx'.format(server)
         print('self.httpURL=', self.httpURL)
         # self.httpURL = 'http://{0}/EWS/exchange.asmx'.format(server) #testing only
         self.encode = b64encode(bytes('{0}:{1}'.format(self._username, self._password), "ascii"))
@@ -1348,10 +1345,10 @@ class Exchange:
 
 
 if __name__ == '__main__':
-    import creds
+
     exchange = Exchange(
-        username=creds.username,
-        password=creds.password
+        username='z-touchpanelno-confrm1.11@extron.com',  # working
+        password='Extron1025',
     )
 
     exchange.Connected = lambda _, state: oldPrint('Exchange', state)
