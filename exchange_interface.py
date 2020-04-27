@@ -8,6 +8,7 @@ from base64 import b64encode, b64decode
 import datetime
 import time
 import requests
+import xml
 
 DEBUG = True
 oldPrint = print
@@ -447,7 +448,7 @@ class Exchange:
     def _GetSoapHeader(self, emailAddress):
         # This should only need to be called once to findMode the header that will be used in the XML request from now on
         if emailAddress is None:
-            xmlAccount = """<t:RequestServerVersion Version="Exchange2007_SP1" />"""
+            xmlAccount = """<t:RequestServerVersion Version="Exchange2013" />"""
         else:
             # replace = '<t:PrincipalName>{0}</t:PrincipalName>'.format(emailAddress)
             # replace = '<t:SID>{0}</t:SID>'.format(emailAddress)
@@ -456,7 +457,7 @@ class Exchange:
 
             # more info on impersonation at this link: https://docs.microsoft.com/en-us/exchange/client-developer/exchange-web-services/how-to-add-appointments-by-using-exchange-impersonation
 
-            xmlAccount = """<t:RequestServerVersion Version="Exchange2007_SP1" />
+            xmlAccount = """<t:RequestServerVersion Version="Exchange2013" />
                             <ExchangeImpersonation>
                                 <ConnectingSID>
                                    {0}
@@ -497,6 +498,16 @@ class Exchange:
 
         regExFolderInfo = re.compile(r't:FolderId Id=\"(.{1,})\" ChangeKey=\"(.{1,})\"\/')
 
+        if self._impersonation:
+            distinguishedFolderID = '''<t:DistinguishedFolderId Id="calendar">
+                          <t:Mailbox>
+                            <t:SmtpAddress>{}</t:SmtpAddress>
+                          </t:Mailbox>
+                        </t:DistinguishedFolderId>'''.format(self._impersonation)
+        else:
+            distinguishedFolderID='<t:DistinguishedFolderId Id="calendar" />'
+
+
         xmlbody = """<?xml version="1.0" encoding="utf-8"?>
                     <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                            xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
@@ -516,11 +527,12 @@ class Exchange:
                                 
                                 <t:FieldURI FieldURI="folder:FolderId" />
                                 <t:FieldURI FieldURI="folder:ParentFolderId" />
-                                <t:FieldURI FieldURI="folder:DisplayName" />
                                 <t:FieldURI FieldURI="folder:TotalCount" />
                                 <t:FieldURI FieldURI="folder:ChildFolderCount" />
+                                <!--<t:FieldURI FieldURI="folder:ExtendedProperty" /> Causing 500 error-->
                                 <t:FieldURI FieldURI="folder:FolderClass" />
                                 <t:FieldURI FieldURI="folder:ManagedFolderInformation" />
+                                <t:FieldURI FieldURI="folder:EffectiveRights" />
                                 <t:FieldURI FieldURI="folder:PermissionSet" />
                                 <t:FieldURI FieldURI="folder:EffectiveRights" />
                                 <t:FieldURI FieldURI="folder:SharingEffectiveRights" />
@@ -530,12 +542,15 @@ class Exchange:
                           </m:FolderShape>
                           
                           <m:FolderIds>
-                            <t:DistinguishedFolderId Id="calendar" />
+                            {1}
                           </m:FolderIds>
                           
                         </m:GetFolder>
                       </soap:Body>
-                    </soap:Envelope>""".format(self._soapHeader)
+                    </soap:Envelope>""".format(
+            self._soapHeader,
+            distinguishedFolderID
+        )
 
         # Request for ID and Key
         response = self._SendHttp(xmlbody)
@@ -710,7 +725,7 @@ class Exchange:
         )
 
         response = self._SendHttp(xmlbody)
-        print('response=', response)
+        print('responseString=', response)
         if response:
             exchangeItems = self._CreateCalendarItemsFromResponse(response)
 
@@ -858,7 +873,7 @@ class Exchange:
                               <t:Start>{3}</t:Start>
                               <t:End>{4}</t:End>
                               <t:MeetingTimeZone TimeZoneName="{5}" />
-                              
+
                               <!-- Add an attendee, needed for the impersonation room to accept the meeting into their calendar -->
                               <!--
                               <t:Location>{6}</t:Location>
@@ -870,8 +885,8 @@ class Exchange:
                                 </t:Attendee>
                                 HTTPretty   
                               </t:RequiredAttendees>
-                              
-                              
+
+
                               <t:Resources>
                                 <t:Attendee>
                                     <t:Mailbox>
@@ -879,7 +894,7 @@ class Exchange:
                                     </t:Mailbox>
                                 </t:Attendee>
                             </t:Resources>
-                            
+
                             -->
                             <!-- nope dont work -->
                             <Organizer>
@@ -887,7 +902,7 @@ class Exchange:
                                     <t:EmailAddress>{6}</t:EmailAddress>
                                 </t:Mailbox>
                             </Organizer>
-                              
+
                             </t:CalendarItem>
                           </m:Items>
                         </m:CreateItem>
@@ -904,48 +919,6 @@ class Exchange:
 
         self._SendHttp(xmlBody)
 
-    def _FindFolder(self, calendar=None):
-        calendar = calendar or self._impersonation
-        xml = '''<?xml version="1.0" encoding="utf-8"?>
-        <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
-               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
-               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-          <soap:Header>
-            {0}
-          </soap:Header>
-          <soap:Body>
-            <m:FindFolder Traversal="Shallow" xmlns="https://schemas.microsoft.com/exchange/services/2006/messages">
-                <m:FolderShape>
-                    <t:BaseShape>Default</t:BaseShape>
-                     <t:AdditionalProperties>
-                        <t:FieldURI FieldURI="folder:DisplayName" />
-                        <t:FieldURI FieldURI="folder:ParentFolderId" />
-                        
-                        <t:FieldURI FieldURI="folder:FolderId" />
-                        <t:FieldURI FieldURI="folder:ParentFolderId" />
-                        <t:FieldURI FieldURI="folder:DisplayName" />
-                        <t:FieldURI FieldURI="folder:TotalCount" />
-                        <t:FieldURI FieldURI="folder:ChildFolderCount" />
-                        <t:FieldURI FieldURI="folder:FolderClass" />
-                        <t:FieldURI FieldURI="folder:ManagedFolderInformation" />
-                        <t:FieldURI FieldURI="folder:PermissionSet" />
-                        <t:FieldURI FieldURI="folder:EffectiveRights" />
-                        <t:FieldURI FieldURI="folder:SharingEffectiveRights" />
-                        
-                    </t:AdditionalProperties>
-                </m:FolderShape>
-               <m:ParentFolderIds>
-                <t:DistinguishedFolderId Id="calendar"/>
-              </m:ParentFolderIds>
-            </m:FindFolder>
-          </soap:Body>
-        </soap:Envelope>    
-        '''.format(self._soapHeader)
-
-        resp = self._SendHttp_requests(xml)
-        print('947 resp=', resp)
-
     def _SendHttp_requests(self, body):
         resp = requests.post(
             url=self.httpURL,
@@ -955,7 +928,7 @@ class Exchange:
             },
             data=body,
         )
-        print('body=\r\n', body)
+        print('soapBody=\r\n', body)
         print('resp.text=', resp.text)
         print('resp.status_code=', resp.status_code)
         print('resp.reason=', resp.reason)
@@ -964,7 +937,7 @@ class Exchange:
         print('965 ret=', ret)
         return ret
 
-    def CreateMeeting(self, subject, body, startDT=None, endDT=None):
+    def CreateMeeting_WIP(self, subject, body, startDT=None, endDT=None):
         # https://docs.microsoft.com/en-us/exchange/client-developer/exchange-web-services/how-to-access-a-calendar-as-a-delegate-by-using-ews-in-exchange
         # https://docs.microsoft.com/en-us/exchange/client-developer/exchange-web-services/how-to-access-a-calendar-as-a-delegate-by-using-ews-in-exchange
         print('CreateMeeting(', subject, body, startDT, endDT)
@@ -1209,7 +1182,7 @@ class Exchange:
     # ----------------------------------------------------------------------------------------------------------------------
 
     def _SendHttp(self, body):
-        print('647 _SendHttp body=', body)
+        print('647 _SendHttp soapBody=\r\n', FormatXML(body))
         body = body.encode()
 
         # The access token needs to be "refreshed" periodically.
@@ -1221,21 +1194,30 @@ class Exchange:
             }
 
         print('908 header=', self.header)
-        request = urllib.request.Request(self.httpURL, body, self.header, method='POST')
 
         try:
-            # response = urllib.request.urlopen(request)
-            response = urllib.request.urlopen(request)
+            resp = requests.request(
+                method='POST',
+                url=self.httpURL,
+                data=body,
+                headers=self.header
+            )
+            print('resp.reason=', resp.reason)
+            print('resp.headers=', resp.headers)
+            print('resp.text=', resp.text)
+            resp.raise_for_status()
 
-            if response:
-                ret = response.read().decode()
-                print('655 _SendHttp ret=', ret)
-                self._NewConnectionStatus('Connected')
-                return ret
+            # request = urllib.request.Request(self.httpURL, soapBody, self.header, method='POST')
+            # responseString = urllib.request.urlopen(request)
+            # if responseString:
+            #     ret = responseString.read().decode()
+            #     print('655 _SendHttp ret=', ret)
+            #     self._NewConnectionStatus('Connected')
+            #     return ret
         except Exception as e:
             self._NewConnectionStatus('Disconnected')
-            print('_SendHttp Exception:\n', e)
-            ProgramLog('exchange_interface_ts53989.py Error:' + str(e), 'error')
+            print('1293 _SendHttp Exception:\n', e)
+            ProgramLog('1294 exchange_interface.py Error:' + str(e), 'error')
             if self._password:
                 oldPrint('username=', self._username, ', password[-3:]=', self._password[-3:])
             # raise e
@@ -1342,6 +1324,15 @@ class Exchange:
         calItems = self._CreateCalendarItemsFromResponse(response)
         print('792 calItems=', calItems)
         return calItems[0] if calItems else None
+
+
+def FormatXML(xml_string):
+    # todo
+    return xml_string
+
+    # xml.dom.minidom.parseString(xml_string)
+    # pretty_xml_as_string = xml.toprettyxml()
+    # return pretty_xml_as_string
 
 
 if __name__ == '__main__':
