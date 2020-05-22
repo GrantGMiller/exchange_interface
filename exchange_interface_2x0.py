@@ -1,9 +1,25 @@
 import datetime
 import re
 import time
-
+from requests_ntlm import HttpNtlmAuth
 import requests
 from calendar_base import _BaseCalendar, _CalendarItem
+
+# debug requests - https://duckduckgo.com/?q=python+requests+debugging&t=ffab&atb=v137-1&ia=web&iax=qa
+import logging
+try:
+    import http.client as http_client
+except ImportError:
+    # Python 2
+    import httplib as http_client
+http_client.HTTPConnection.debuglevel = 1
+logging.basicConfig()
+logging.getLogger().setLevel(logging.DEBUG)
+requests_log = logging.getLogger("requests.packages.urllib3")
+requests_log.setLevel(logging.DEBUG)
+requests_log.propagate = True
+
+########################################
 
 RE_CAL_ITEM = re.compile('<t:CalendarItem>[\w\W]*?<\/t:CalendarItem>')
 RE_ITEM_ID = re.compile(
@@ -19,12 +35,28 @@ RE_HTML_BODY = re.compile('<t:Body BodyType="HTML">([\w\W]*)</t:Body>', re.IGNOR
 RE_EMAIL_ADDRESS = re.compile('.*?\@.*?\..*?')
 
 
-class Office365EWS(_BaseCalendar):
-    def __init__(self, username=None, password=None, impersonation=None, myTimezoneName=None):
+class EWS(_BaseCalendar):
+    def __init__(
+            self,
+            username=None,
+            password=None,
+            impersonation=None,
+            myTimezoneName=None,
+            serverURL=None,
+            authType='Basic',  # also accept "NTLM"
+            ntlmDomain=None,
+            apiVersion='Exchange2013',
+            verifyCerts=True,
+            debug=False,
+    ):
         super().__init__()
         self._username = username
         self._password = password
         self._impersonation = impersonation
+        self._serverURL = serverURL
+        self._apiVersin = apiVersion
+        self._verifyCerts = verifyCerts
+        self._debug = debug
 
         thisMachineTimezoneName = time.tzname[0]
         if thisMachineTimezoneName == 'EST':
@@ -38,7 +70,13 @@ class Office365EWS(_BaseCalendar):
         print('myTimezoneName=', self._myTimezoneName)
 
         self._session = requests.session()
-        self._session.auth = requests.auth.HTTPBasicAuth(self._username, self._password)
+
+        self._session.headers['Content-Type'] = 'text/xml'
+
+        if authType == 'Basic':
+            self._session.auth = requests.auth.HTTPBasicAuth(self._username, self._password)
+        elif authType == 'NTLM':
+            self._session.auth = HttpNtlmAuth(f'{ntlmDomain}\\{self._username.split("@")[0]}', self._password)
 
         self._folderID = None
         self._folderChangeKey = None
@@ -166,12 +204,12 @@ class Office365EWS(_BaseCalendar):
         self._DoRequest(soapBody)
 
     def _DoRequest(self, soapBody):
-        API_VERSION = 'Exchange2013'
+        # API_VERSION = 'Exchange2013'
         # API_VERSION = 'Exchange2007_SP1'
 
         if self._impersonation:
             soapHeader = f'''
-                <t:RequestServerVersion Version="{API_VERSION}" />
+                <t:RequestServerVersion Version="{self._apiVersin}" />
                     <ExchangeImpersonation>
                         <ConnectingSID>
                            <t:SmtpAddress>{self._impersonation}</t:SmtpAddress>
@@ -179,7 +217,7 @@ class Office365EWS(_BaseCalendar):
                     </ExchangeImpersonation>
             '''
         else:
-            soapHeader = f'<t:RequestServerVersion Version="{API_VERSION}" />'
+            soapHeader = f'<t:RequestServerVersion Version="{self._apiVersin}" />'
 
         soapEnvelopeOpenTag = '''<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">'''
 
@@ -195,10 +233,17 @@ class Office365EWS(_BaseCalendar):
         '''
 
         print('xml=', xml)
+        if self._serverURL:
+            url = self._serverURL + '/EWS/exchange.asmx'
+        else:
+            url = 'https://outlook.office365.com/EWS/exchange.asmx'
+
+        print('session.headers=', self._session.headers)
         resp = self._session.request(
             method='POST',
-            url='https://outlook.office365.com/EWS/exchange.asmx',
+            url=url,
             data=xml,
+            verify=self._verifyCerts,
         )
         print('resp.status_code=', resp.status_code)
         print('resp.reason=', resp.reason)
@@ -461,14 +506,27 @@ def ConvertTimeStringToDatetime(string):
 if __name__ == '__main__':
     import creds
 
-    ews = Office365EWS(
+    ews = EWS(
         # username=creds.username,
         # password=creds.password,
         # impersonation='rnchallwaysignage2@extron.com',
 
-        username=creds.dev_username,
-        password=creds.dev_password,
-        impersonation='roomagenttestaccount@ExtronDev.com',
+        # username=creds.dev_username,
+        # password=creds.dev_password,
+        # impersonation='roomagenttestaccount@ExtronDev.com',
+
+        # serverURL='https://webmail.fmh.org',
+        # username='conffmhisconfrm1@fmh.org',
+        # password='Password#123',
+        # # PIN 12345678
+        # authType='NTLM',
+        # ntlmDomain='Fmhnt',
+        # verifyCerts=False,
+        # apiVersion='Exchange2010_SP2'
+
+        username='HOUSPanel@eogresources.com',
+        password='Welcome2eog',
+
     )
 
     ews.Connected = lambda _, state: print('EWS', state)
@@ -478,10 +536,9 @@ if __name__ == '__main__':
     ews.CalendarItemDeleted = lambda _, item: print('CalendarItemDeleted(', item)
 
     ews.UpdateCalendar()
-    ews.CreateCalendarEvent(
-        subject='Subject ' + time.asctime(),
-        body='Body ' + time.asctime(),
-        startDT=datetime.datetime.utcnow(),
-        endDT=datetime.datetime.utcnow() + datetime.timedelta(minutes=15),
-    )
-
+    # ews.CreateCalendarEvent(
+    #     subject='Subject ' + time.asctime(),
+    #     body='Body ' + time.asctime(),
+    #     startDT=datetime.datetime.utcnow(),
+    #     endDT=datetime.datetime.utcnow() + datetime.timedelta(minutes=15),
+    # )
