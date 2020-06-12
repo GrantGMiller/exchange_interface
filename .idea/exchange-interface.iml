@@ -2,8 +2,13 @@
 <module type="PYTHON_MODULE" version="4">
   <component name="NewModuleRootManager">
     <content url="file://$MODULE_DIR$" />
-    <orderEntry type="jdk" jdkName="Python 3.6.3 (C:\Python36\python.exe)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Pipenv (exchange-interface)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="calendar_base" />
+    <orderEntry type="module" module-name="persistant-variables" />
+    <orderEntry type="module" module-name="oAuth_tools_2" />
+    <orderEntry type="module" module-name="aes-tools" />
+    <orderEntry type="module" module-name="extronlib-clone" />
+    <orderEntry type="module" module-name="connection-handler" />
   </component>
 </module>

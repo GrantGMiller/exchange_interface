@@ -7,6 +7,7 @@ from calendar_base import _BaseCalendar, _CalendarItem
 
 # debug requests - https://duckduckgo.com/?q=python+requests+debugging&t=ffab&atb=v137-1&ia=web&iax=qa
 import logging
+
 try:
     import http.client as http_client
 except ImportError:
@@ -19,20 +20,32 @@ requests_log = logging.getLogger("requests.packages.urllib3")
 requests_log.setLevel(logging.DEBUG)
 requests_log.propagate = True
 
+TZ_NAME = time.tzname[0]
+if TZ_NAME == 'EST':
+    TZ_NAME = 'Eastern Standard Time'
+elif TZ_NAME == 'PST':
+    TZ_NAME = 'Pacific Standard Time'
+elif TZ_NAME == 'CST':
+    TZ_NAME = 'Central Standard Time'
 ########################################
 
 RE_CAL_ITEM = re.compile('<t:CalendarItem>[\w\W]*?<\/t:CalendarItem>')
 RE_ITEM_ID = re.compile(
-    '<t:ItemId Id="(.*?)" ChangeKey="(.*?)"/>')  # group(1) = itemID, group(2) = changeKey #within a CalendarItem
+    '<t:ItemId Id="(.*?)" ChangeKey="(.*?)"/>'
+)  # group(1) = itemID, group(2) = changeKey #within a CalendarItem
 RE_SUBJECT = re.compile('<t:Subject>(.*?)</t:Subject>')  # within a CalendarItem
 RE_HAS_ATTACHMENTS = re.compile('<t:HasAttachments>(.{4,5})</t:HasAttachments>')  # within a CalendarItem
 RE_ORGANIZER = re.compile(
-    '<t:Organizer>.*<t:Name>(.*?)</t:Name>.*</t:Organizer>')  # group(1)=Name #within a CalendarItem
+    '<t:Organizer>.*<t:Name>(.*?)</t:Name>.*</t:Organizer>'
+)  # group(1)=Name #within a CalendarItem
 RE_START_TIME = re.compile('<t:Start>(.*?)</t:Start>')  # group(1) = start time string #within a CalendarItem
 RE_END_TIME = re.compile('<t:End>(.*?)</t:End>')  # group(1) = end time string #within a CalendarItem
 RE_HTML_BODY = re.compile('<t:Body BodyType="HTML">([\w\W]*)</t:Body>', re.IGNORECASE)
 
 RE_EMAIL_ADDRESS = re.compile('.*?\@.*?\..*?')
+
+RE_ERROR_CLASS = re.compile('ResponseClass="Error"', re.IGNORECASE)
+RE_ERROR_MESSAGE = re.compile('<m:MessageText>([\w\W]*)</m:MessageText>')
 
 
 class EWS(_BaseCalendar):
@@ -43,8 +56,9 @@ class EWS(_BaseCalendar):
             impersonation=None,
             myTimezoneName=None,
             serverURL=None,
-            authType='Basic',  # also accept "NTLM"
+            authType='Basic',  # also accept "NTLM" and "Oauth"
             ntlmDomain=None,
+            oauthCallback=None,  # callable, takes no args, returns Oauth token
             apiVersion='Exchange2013',
             verifyCerts=True,
             debug=False,
@@ -54,6 +68,8 @@ class EWS(_BaseCalendar):
         self._password = password
         self._impersonation = impersonation
         self._serverURL = serverURL
+        self._authType = authType
+        self._oauthCallback = oauthCallback
         self._apiVersin = apiVersion
         self._verifyCerts = verifyCerts
         self._debug = debug
@@ -77,7 +93,10 @@ class EWS(_BaseCalendar):
             self._session.auth = requests.auth.HTTPBasicAuth(self._username, self._password)
         elif authType == 'NTLM':
             self._session.auth = HttpNtlmAuth(f'{ntlmDomain}\\{self._username.split("@")[0]}', self._password)
-
+        elif authType == 'Oauth':
+            pass  # we will put the accessToken into each DoRequest
+        else:
+            raise TypeError('Unknown Authorization Type')
         self._folderID = None
         self._folderChangeKey = None
         self._parentFolderID = None
@@ -99,17 +118,19 @@ class EWS(_BaseCalendar):
                     <t:BaseShape>IdOnly</t:BaseShape>
                     <t:AdditionalProperties>
                         <t:FieldURI FieldURI="folder:DisplayName" />
-                        <t:FieldURI FieldURI="folder:ParentFolderId" />
-                        <t:FieldURI FieldURI="folder:FolderId" />
-                        <t:FieldURI FieldURI="folder:ParentFolderId" />
-                        <t:FieldURI FieldURI="folder:TotalCount" />
-                        <t:FieldURI FieldURI="folder:ChildFolderCount" />
-                        <t:FieldURI FieldURI="folder:FolderClass" />
-                        <t:FieldURI FieldURI="folder:ManagedFolderInformation" />
                         <t:FieldURI FieldURI="folder:EffectiveRights" />
                         <t:FieldURI FieldURI="folder:PermissionSet" />
                         <t:FieldURI FieldURI="folder:EffectiveRights" />
                         <t:FieldURI FieldURI="folder:SharingEffectiveRights" />
+
+                        <!--
+                        <t:FieldURI FieldURI="folder:ParentFolderId" />
+                        <t:FieldURI FieldURI="folder:FolderId" />
+                        <t:FieldURI FieldURI="folder:TotalCount" />
+                        <t:FieldURI FieldURI="folder:ChildFolderCount" />
+                        <t:FieldURI FieldURI="folder:FolderClass" />
+                        <t:FieldURI FieldURI="folder:ManagedFolderInformation" />
+                        -->
                     </t:AdditionalProperties>
                 </m:FolderShape>
                 <m:FolderIds>
@@ -210,16 +231,22 @@ class EWS(_BaseCalendar):
         if self._impersonation:
             soapHeader = f'''
                 <t:RequestServerVersion Version="{self._apiVersin}" />
-                    <ExchangeImpersonation>
-                        <ConnectingSID>
-                           <t:SmtpAddress>{self._impersonation}</t:SmtpAddress>
-                        </ConnectingSID>
-                    </ExchangeImpersonation>
+                    <t:ExchangeImpersonation>
+                        <t:ConnectingSID>
+                            <t:PrimarySmtpAddress>{self._impersonation}</t:PrimarySmtpAddress> <!-- Needs to be in a single line -->
+                        </t:ConnectingSID>
+                    </t:ExchangeImpersonation>
             '''
         else:
             soapHeader = f'<t:RequestServerVersion Version="{self._apiVersin}" />'
 
-        soapEnvelopeOpenTag = '''<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">'''
+        soapEnvelopeOpenTag = '''
+            <soap:Envelope 
+                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+                xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" 
+                xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types" 
+                xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+            >'''
 
         xml = f'''<?xml version="1.0" encoding="utf-8"?>
                     {soapEnvelopeOpenTag}
@@ -238,6 +265,9 @@ class EWS(_BaseCalendar):
         else:
             url = 'https://outlook.office365.com/EWS/exchange.asmx'
 
+        if self._authType == 'Oauth':
+            self._session.headers['authorization'] = f'Bearer {self._oauthCallback()}'
+
         print('session.headers=', self._session.headers)
         resp = self._session.request(
             method='POST',
@@ -249,9 +279,11 @@ class EWS(_BaseCalendar):
         print('resp.reason=', resp.reason)
         print('resp.text=', resp.text)
 
-        if resp.ok:
+        if resp.ok and RE_ERROR_CLASS.search(resp.text) is None:
             self._NewConnectionStatus('Connected')
         else:
+            for match in RE_ERROR_MESSAGE.finditer(resp.text):
+                print('Error Message:', match.group(1))
             self._NewConnectionStatus('Disconnected')
 
         return resp
@@ -268,9 +300,6 @@ class EWS(_BaseCalendar):
 
         parentFolder = f'''
             <t:DistinguishedFolderId Id="calendar">
-                <t:Mailbox>
-                    <t:EmailAddress>{calendar}</t:EmailAddress>
-                </t:Mailbox>
             </t:DistinguishedFolderId>
         '''
 
@@ -524,8 +553,24 @@ if __name__ == '__main__':
         # verifyCerts=False,
         # apiVersion='Exchange2010_SP2'
 
-        username='HOUSPanel@eogresources.com',
-        password='Welcome2eog',
+        # username='HOUSPanel@eogresources.com',
+        # password='Welcome2eog',
+
+        # works cuz 105 gave edit access to everyone in org
+        # username='gm_service_account@extrondemo.com',
+        # impersonation='rf_a105@extrondemo.com',
+        # password='Extron1025',
+
+        # gm has ApplicationImpersonation
+        username='gm_service_account@extrondemo.com',
+        impersonation='rf_a101@extrondemo.com',
+        password='Extron1025',
+        apiVersion='Exchange2007_SP1'
+
+        # gve has ApplicationImpersonation and delegate to all rf_Axxx accounts
+        # username='gve@extrondemo.com',
+        # impersonation='rf_a101@extrondemo.com',
+        # password='gv3$erV!c3',
 
     )
 

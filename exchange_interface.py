@@ -1338,7 +1338,20 @@ def FormatXML(xml_string):
 if __name__ == '__main__':
 
     exchange = Exchange(
-        username='z-touchpanelno-confrm1.11@extron.com',  # working
+        # username='z-touchpanelno-confrm1.11@extron.com',  # working
+        # password='Extron1025',
+
+        # National Accounts
+        # username='felipe@extrondemo.com',
+        # impersonation='ra_rncrm1@extrondemo.com',
+        # password='ExtronDemo1025',
+
+        # username='ra_rncrm1@extrondemo.com',
+        # password='ExtR0n_r@',
+
+
+        username='gm_service_account@extrondemo.com',
+        impersonation='rf_a120@extrondemo.com',
         password='Extron1025',
     )
 
