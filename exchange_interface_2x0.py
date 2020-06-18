@@ -538,41 +538,11 @@ if __name__ == '__main__':
     import creds
 
     ews = EWS(
-        # username=creds.username,
-        # password=creds.password,
-        # impersonation='rnchallwaysignage2@extron.com',
-
-        # username=creds.dev_username,
-        # password=creds.dev_password,
-        # impersonation='roomagenttestaccount@ExtronDev.com',
-
-        # serverURL='https://webmail.fmh.org',
-        # username='conffmhisconfrm1@fmh.org',
-        # password='Password#123',
-        # # PIN 12345678
-        # authType='NTLM',
-        # ntlmDomain='Fmhnt',
-        # verifyCerts=False,
-        # apiVersion='Exchange2010_SP2'
-
-        # username='HOUSPanel@eogresources.com',
-        # password='Welcome2eog',
-
-        # works cuz 105 gave edit access to everyone in org
-        # username='gm_service_account@extrondemo.com',
-        # impersonation='rf_a105@extrondemo.com',
-        # password='Extron1025',
 
         # gm has ApplicationImpersonation
         username='gm_service_account@extrondemo.com',
         impersonation='rf_a101@extrondemo.com',
         password='Extron1025',
-        apiVersion='Exchange2007_SP1'
-
-        # gve has ApplicationImpersonation and delegate to all rf_Axxx accounts
-        # username='gve@extrondemo.com',
-        # impersonation='rf_a101@extrondemo.com',
-        # password='gv3$erV!c3',
 
     )
 
