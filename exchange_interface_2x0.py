@@ -13,6 +13,7 @@ try:
 except ImportError:
     # Python 2
     import httplib as http_client
+
 http_client.HTTPConnection.debuglevel = 1
 logging.basicConfig()
 logging.getLogger().setLevel(logging.DEBUG)
@@ -305,29 +306,30 @@ class EWS(_BaseCalendar):
 
         soapBody = f'''
             <m:FindItem Traversal="Shallow">
-            <m:ItemShape>
-                <t:BaseShape>IdOnly</t:BaseShape>
-                <t:AdditionalProperties>
-                    <t:FieldURI FieldURI="item:Subject" />
-                    <t:FieldURI FieldURI="calendar:Start" />
-                    <t:FieldURI FieldURI="calendar:End" />
-                    <t:FieldURI FieldURI="item:Body" />
-                    <t:FieldURI FieldURI="calendar:Organizer" />
-                    <t:FieldURI FieldURI="calendar:RequiredAttendees" />
-                    <t:FieldURI FieldURI="calendar:OptionalAttendees" />
-                    <t:FieldURI FieldURI="item:HasAttachments" />
-                    <t:FieldURI FieldURI="item:Sensitivity" />
-                </t:AdditionalProperties>
-            </m:ItemShape>
-            <m:CalendarView 
-                MaxEntriesReturned="100" 
-                StartDate="{startTimestring}" 
-                EndDate="{endTimestring}" 
-                />
-            <m:ParentFolderIds>
-                {parentFolder}
-            </m:ParentFolderIds>
-        </m:FindItem>
+                <m:ItemShape>
+                    <t:BaseShape>IdOnly</t:BaseShape>
+                    <t:AdditionalProperties>
+                        <t:FieldURI FieldURI="item:Subject" />
+                        <t:FieldURI FieldURI="calendar:Start" />
+                        <t:FieldURI FieldURI="calendar:End" />
+                        <t:FieldURI FieldURI="item:Body" />
+                        <t:FieldURI FieldURI="calendar:Organizer" />
+                        <t:FieldURI FieldURI="calendar:RequiredAttendees" />
+                        <t:FieldURI FieldURI="calendar:OptionalAttendees" />
+                        <t:FieldURI FieldURI="item:HasAttachments" />
+                        <t:FieldURI FieldURI="item:Sensitivity" />
+                    </t:AdditionalProperties>
+                </m:ItemShape>
+                <m:CalendarView 
+                    MaxEntriesReturned="100" 
+                    StartDate="{startTimestring}" 
+                    EndDate="{endTimestring}" 
+                    />
+                <m:ParentFolderIds>
+                     {parentFolder}
+                     <!--<t:FolderId Id="{self._folderID}" /> this is the way the TLS FW does it -->
+                </m:ParentFolderIds>
+            </m:FindItem>
         '''
         resp = self._DoRequest(soapBody)
         calItems = self._CreateCalendarItemsFromResponse(resp.text)
@@ -582,8 +584,8 @@ if __name__ == '__main__':
 
     ews.UpdateCalendar()
     # ews.CreateCalendarEvent(
-    #     subject='Subject ' + time.asctime(),
-    #     body='Body ' + time.asctime(),
+    #     subject='Test Subject ' + time.asctime(),
+    #     body='Test Body ' + time.asctime(),
     #     startDT=datetime.datetime.utcnow(),
     #     endDT=datetime.datetime.utcnow() + datetime.timedelta(minutes=15),
     # )
