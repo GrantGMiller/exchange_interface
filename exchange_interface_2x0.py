@@ -535,7 +535,6 @@ def ConvertTimeStringToDatetime(string):
 
 
 if __name__ == '__main__':
-    import creds
 
     ews = EWS(
 
