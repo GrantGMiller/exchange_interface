@@ -11,4 +11,10 @@
     <orderEntry type="module" module-name="extronlib-clone" />
     <orderEntry type="module" module-name="connection-handler" />
   </component>
+  <component name="PackageRequirementsSettings">
+    <option name="requirementsPath" value="" />
+  </component>
+  <component name="TestRunnerService">
+    <option name="PROJECT_TEST_RUNNER" value="pytest" />
+  </component>
 </module>

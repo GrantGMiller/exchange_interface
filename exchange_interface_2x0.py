@@ -8,11 +8,7 @@ from calendar_base import _BaseCalendar, _CalendarItem
 # debug requests - https://duckduckgo.com/?q=python+requests+debugging&t=ffab&atb=v137-1&ia=web&iax=qa
 import logging
 
-try:
-    import http.client as http_client
-except ImportError:
-    # Python 2
-    import httplib as http_client
+import http.client as http_client
 
 http_client.HTTPConnection.debuglevel = 1
 logging.basicConfig()
@@ -181,21 +177,14 @@ class EWS(_BaseCalendar):
         startTimestring = ConvertDatetimeToTimeString(startDT)
         endTimestring = ConvertDatetimeToTimeString(endDT)
 
-        if self._impersonation:
-            parentFolder = f'''
-                <t:DistinguishedFolderId Id="calendar">
-                    <t:Mailbox>
-                        <t:EmailAddress>{self._impersonation}</t:EmailAddress>
-                    </t:Mailbox>
-                </t:DistinguishedFolderId>
-            '''
-        else:
-            parentFolder = f'''
-                <t:FolderId 
-                    Id="{self._folderID}" 
-                    ChangeKey="{self._folderChangeKey}"
-                    />
-                        '''
+
+        parentFolder = f'''
+            <t:DistinguishedFolderId Id="calendar">
+                <t:Mailbox>
+                    <t:EmailAddress>{self._impersonation or self._username}</t:EmailAddress>
+                </t:Mailbox>
+            </t:DistinguishedFolderId>
+        '''
 
         soapBody = f'''
             <m:FindItem Traversal="Shallow">
@@ -535,13 +524,28 @@ def ConvertTimeStringToDatetime(string):
 
 
 if __name__ == '__main__':
-
+    import creds
     ews = EWS(
 
         # gm has ApplicationImpersonation
         username='gm_service_account@extrondemo.com',
         impersonation='rf_a101@extrondemo.com',
         password='Extron1025',
+
+        # username='rf_a101@extrondemo.com',
+        # password='Extron123!',
+
+        # username='gm_service_account@extrondemo.com',
+        # password='Extron1025',
+
+        # username='impersonation-onprem@extron.com',
+        # impersonation='Test-pm4@extron.com',
+        # password='Extron1025',
+
+        # username=creds.username,
+        # password=creds.password,
+
+
 
     )
 
@@ -552,9 +556,9 @@ if __name__ == '__main__':
     ews.CalendarItemDeleted = lambda _, item: print('CalendarItemDeleted(', item)
 
     ews.UpdateCalendar()
-    # ews.CreateCalendarEvent(
-    #     subject='Test Subject ' + time.asctime(),
-    #     body='Test Body ' + time.asctime(),
-    #     startDT=datetime.datetime.utcnow(),
-    #     endDT=datetime.datetime.utcnow() + datetime.timedelta(minutes=15),
-    # )
+    ews.CreateCalendarEvent(
+        subject='Test Subject ' + time.asctime(),
+        body='Test Body ' + time.asctime(),
+        startDT=datetime.datetime.utcnow(),
+        endDT=datetime.datetime.utcnow() + datetime.timedelta(minutes=15),
+    )
