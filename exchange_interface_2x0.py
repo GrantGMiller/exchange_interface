@@ -335,9 +335,18 @@ class EWS(_BaseCalendar):
 
         calendar = self._impersonation or self._username
 
-        parentFolder = f'''
-                    <t:DistinguishedFolderId Id="calendar"/>
-                '''
+        if self._useDistinguishedFolderMailbox:
+            parentFolder = f'''
+                <t:DistinguishedFolderId Id="calendar">
+                    <t:Mailbox>
+                        <t:EmailAddress>{self._impersonation}</t:EmailAddress>
+                    </t:Mailbox>
+                </t:DistinguishedFolderId>
+            '''
+        else:
+            parentFolder = f'''
+                <t:DistinguishedFolderId Id="calendar"/>
+            '''
 
         soapBody = f'''
             <m:CreateItem SendMeetingInvitations="SendToNone">
