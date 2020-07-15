@@ -56,7 +56,7 @@ class EWS(_BaseCalendar):
             authType='Basic',  # also accept "NTLM" and "Oauth"
             ntlmDomain=None,
             oauthCallback=None,  # callable, takes no args, returns Oauth token
-            apiVersion='Exchange2013',
+            apiVersion='Exchange2007_SP1',  # TLS uses "Exchange2007_SP1"
             verifyCerts=True,
             debug=False,
     ):
@@ -67,7 +67,7 @@ class EWS(_BaseCalendar):
         self._serverURL = serverURL
         self._authType = authType
         self._oauthCallback = oauthCallback
-        self._apiVersin = apiVersion
+        self._apiVersion = apiVersion
         self._verifyCerts = verifyCerts
         self._debug = debug
 
@@ -94,11 +94,9 @@ class EWS(_BaseCalendar):
             pass  # we will put the accessToken into each DoRequest
         else:
             raise TypeError('Unknown Authorization Type')
-        self._folderID = None
-        self._folderChangeKey = None
-        self._parentFolderID = None
-        self._parentFolderChangeKey = None
-        self._UpdateFolderIdAndChangeKey()
+
+        self._useImpersonationIfAvailable = True
+        self._useDistinguishedFolderMailbox = False
 
     @property
     def Impersonation(self):
@@ -108,67 +106,6 @@ class EWS(_BaseCalendar):
     def Impersonation(self, newImpersonation):
         self._impersonation = newImpersonation
 
-    def _UpdateFolderIdAndChangeKey(self):
-        soapBody = f'''
-            <m:GetFolder>
-                <m:FolderShape>
-                    <t:BaseShape>IdOnly</t:BaseShape>
-                    <t:AdditionalProperties>
-                        <t:FieldURI FieldURI="folder:DisplayName" />
-                        <t:FieldURI FieldURI="folder:EffectiveRights" />
-                        <t:FieldURI FieldURI="folder:PermissionSet" />
-                        <t:FieldURI FieldURI="folder:EffectiveRights" />
-                        <t:FieldURI FieldURI="folder:SharingEffectiveRights" />
-
-                        <!--
-                        <t:FieldURI FieldURI="folder:ParentFolderId" />
-                        <t:FieldURI FieldURI="folder:FolderId" />
-                        <t:FieldURI FieldURI="folder:TotalCount" />
-                        <t:FieldURI FieldURI="folder:ChildFolderCount" />
-                        <t:FieldURI FieldURI="folder:FolderClass" />
-                        <t:FieldURI FieldURI="folder:ManagedFolderInformation" />
-                        -->
-                    </t:AdditionalProperties>
-                </m:FolderShape>
-                <m:FolderIds>
-                    <t:DistinguishedFolderId Id="calendar">
-                        <t:Mailbox>
-                            <t:EmailAddress>{self._impersonation or self._username}</t:EmailAddress>
-                        </t:Mailbox>
-                    </t:DistinguishedFolderId>
-                </m:FolderIds>
-            </m:GetFolder>
-        '''
-        resp = self._DoRequest(soapBody)
-
-        if resp.ok:
-            folderIDmatch = re.search(
-                '<t:FolderId Id="(\S+)" ChangeKey="(\S+)"',
-                resp.text
-            )
-            if folderIDmatch:
-                self._folderID = folderIDmatch.group(1)
-                self._folderChangeKey = folderIDmatch.group(2)
-
-            parentFolderIDMatch = re.search(
-                '<t:ParentFolderId Id="(\S+)" ChangeKey="(\S+)"',
-                resp.text
-            )
-
-            if parentFolderIDMatch:
-                self._parentFolderID = parentFolderIDMatch.group(1)
-                self._parentFolderChangeKey = parentFolderIDMatch.group(2)
-
-        print('self._folderID=', self._folderID)
-        if self._folderID == 'AAMkADUwYjNkM2E3LTU3NjItNDhiYy05OWMxLWFjODA3OWIyMzM2YQAuAAAAAABzW8VI17MkQKOqS7/8MpCVAQB2sDMUyJEmSodpgKkrpkDCAAAAAAENAAA=':
-            print('Folder ID is for roomagenttestaccount@ExtronDev.com')
-        elif self._folderID == 'AQMkADc1ZmM4NzI0LWU0MWItNGRmNy1iYTEyLTJjZTNiYgA5ZTU2OWQALgAAA4pDgrXmI5tDjIdgIxo0INQBAPMhx9SRoMpHkTKd4YnGaS8AAAIBDQAAAA==':
-            print('Folder ID is for grantm@extrondev.com')
-
-        print('self._folderChangeKey=', self._folderChangeKey)
-        print('self._parentFolderID=', self._parentFolderID)
-        print('self._parentFolderChangeKey=', self._parentFolderChangeKey)
-
     def GetEvents(self, startDT=None, endDT=None):
         # Default is to return events from (now-1days) to (now+7days)
         startDT = startDT or datetime.datetime.utcnow() - datetime.timedelta(days=1)
@@ -177,13 +114,8 @@ class EWS(_BaseCalendar):
         startTimestring = ConvertDatetimeToTimeString(startDT)
         endTimestring = ConvertDatetimeToTimeString(endDT)
 
-
         parentFolder = f'''
-            <t:DistinguishedFolderId Id="calendar">
-                <t:Mailbox>
-                    <t:EmailAddress>{self._impersonation or self._username}</t:EmailAddress>
-                </t:Mailbox>
-            </t:DistinguishedFolderId>
+            <t:DistinguishedFolderId Id="calendar"/>
         '''
 
         soapBody = f'''
@@ -218,20 +150,23 @@ class EWS(_BaseCalendar):
         # API_VERSION = 'Exchange2013'
         # API_VERSION = 'Exchange2007_SP1'
 
-        if self._impersonation:
+        if self._impersonation and self._useImpersonationIfAvailable:
             # Note: Don't add a namespace to the <ExchangeImpersonation> and <ConnectingSID> tags
             # This will cause a "You don't have permission to impersonate this account" error.
             # Don't ask my why.
+            # UPDATE: removing the namespace makes this work for licensed accounts, but not for service accounts with impersonation, so now i really dont understand whats going on
+
+            # https://docs.microsoft.com/en-us/exchange/client-developer/exchange-web-services/how-to-identify-the-account-to-impersonate
             soapHeader = f'''
-                <t:RequestServerVersion Version="{self._apiVersin}" />
-                <ExchangeImpersonation>
-                    <ConnectingSID>
+                <t:RequestServerVersion Version="{self._apiVersion}" />
+                <t:ExchangeImpersonation>
+                    <t:ConnectingSID>
                         <t:PrimarySmtpAddress>{self._impersonation}</t:PrimarySmtpAddress> <!-- Needs to be in a single line -->
-                    </ConnectingSID>
-                </ExchangeImpersonation>
+                    </t:ConnectingSID>
+                </t:ExchangeImpersonation>
             '''
         else:
-            soapHeader = f'<t:RequestServerVersion Version="{self._apiVersin}" />'
+            soapHeader = f'<t:RequestServerVersion Version="{self._apiVersion}" />'
 
         soapEnvelopeOpenTag = '''
             <soap:Envelope 
@@ -279,6 +214,16 @@ class EWS(_BaseCalendar):
                 print('Error Message:', match.group(1))
             self._NewConnectionStatus('Disconnected')
 
+            if 'The account does not have permission to impersonate the requested user.' in resp.text:
+                if self._useImpersonationIfAvailable is True:
+                    print('Switching impersonation mode')
+
+                    self._useImpersonationIfAvailable = not self._useImpersonationIfAvailable
+                    self._useDistinguishedFolderMailbox = not self._useDistinguishedFolderMailbox
+
+                    print('self._useImpersonationIfAvailable=', self._useImpersonationIfAvailable)
+                    print('self._useDistinguishedFolderMailbox=', self._useDistinguishedFolderMailbox)
+
         return resp
 
     def UpdateCalendar(self, calendar=None, startDT=None, endDT=None):
@@ -291,10 +236,18 @@ class EWS(_BaseCalendar):
 
         calendar = calendar or self._impersonation or self._username
 
-        parentFolder = f'''
-            <t:DistinguishedFolderId Id="calendar">
-            </t:DistinguishedFolderId>
-        '''
+        if self._useDistinguishedFolderMailbox:
+            parentFolder = f'''
+                <t:DistinguishedFolderId Id="calendar">
+                    <t:Mailbox>
+                        <t:EmailAddress>{self._impersonation}</t:EmailAddress>
+                    </t:Mailbox>
+                </t:DistinguishedFolderId>
+            '''
+        else:
+            parentFolder = f'''
+                <t:DistinguishedFolderId Id="calendar"/>
+            '''
 
         soapBody = f'''
             <m:FindItem Traversal="Shallow">
@@ -319,7 +272,6 @@ class EWS(_BaseCalendar):
                     />
                 <m:ParentFolderIds>
                      {parentFolder}
-                     <!--<t:FolderId Id="{self._folderID}" /> this is the way the TLS FW does it -->
                 </m:ParentFolderIds>
             </m:FindItem>
         '''
@@ -384,11 +336,7 @@ class EWS(_BaseCalendar):
         calendar = self._impersonation or self._username
 
         parentFolder = f'''
-                    <t:DistinguishedFolderId Id="calendar">
-                        <t:Mailbox>
-                            <t:EmailAddress>{calendar}</t:EmailAddress>
-                        </t:Mailbox>
-                    </t:DistinguishedFolderId>
+                    <t:DistinguishedFolderId Id="calendar"/>
                 '''
 
         soapBody = f'''
@@ -528,6 +476,7 @@ def ConvertTimeStringToDatetime(string):
 
 if __name__ == '__main__':
     import creds
+
     ews = EWS(
 
         # gm has ApplicationImpersonation
@@ -547,8 +496,6 @@ if __name__ == '__main__':
 
         # username=creds.username,
         # password=creds.password,
-
-
 
     )
 
