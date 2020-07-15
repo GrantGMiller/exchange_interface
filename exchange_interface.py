@@ -1214,6 +1214,8 @@ class Exchange:
             #     print('655 _SendHttp ret=', ret)
             #     self._NewConnectionStatus('Connected')
             #     return ret
+
+            return resp.text
         except Exception as e:
             self._NewConnectionStatus('Disconnected')
             print('1293 _SendHttp Exception:\n', e)

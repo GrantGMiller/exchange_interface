@@ -219,13 +219,16 @@ class EWS(_BaseCalendar):
         # API_VERSION = 'Exchange2007_SP1'
 
         if self._impersonation:
+            # Note: Don't add a namespace to the <ExchangeImpersonation> and <ConnectingSID> tags
+            # This will cause a "You don't have permission to impersonate this account" error.
+            # Don't ask my why.
             soapHeader = f'''
                 <t:RequestServerVersion Version="{self._apiVersin}" />
-                    <t:ExchangeImpersonation>
-                        <t:ConnectingSID>
-                            <t:PrimarySmtpAddress>{self._impersonation}</t:PrimarySmtpAddress> <!-- Needs to be in a single line -->
-                        </t:ConnectingSID>
-                    </t:ExchangeImpersonation>
+                <ExchangeImpersonation>
+                    <ConnectingSID>
+                        <t:PrimarySmtpAddress>{self._impersonation}</t:PrimarySmtpAddress> <!-- Needs to be in a single line -->
+                    </ConnectingSID>
+                </ExchangeImpersonation>
             '''
         else:
             soapHeader = f'<t:RequestServerVersion Version="{self._apiVersin}" />'
