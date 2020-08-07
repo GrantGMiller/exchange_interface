@@ -7,6 +7,7 @@ import urllib.request, re
 from base64 import b64encode, b64decode
 import datetime
 import time
+
 try:
     import requests
 except:
@@ -50,6 +51,8 @@ RE_END_TIME = re.compile('<t:End>(.*?)</t:End>')  # group(1) = end time string #
 RE_HTML_BODY = re.compile('<t:Body BodyType="HTML">([\w\W]*)</t:Body>', re.IGNORECASE)
 
 RE_EMAIL_ADDRESS = re.compile('.*?\@.*?\..*?')
+
+EXCHANGE_VERSION = 'Exchange2007_SP1'
 
 
 def ConvertTimeStringToDatetime(string):
@@ -450,7 +453,7 @@ class Exchange:
     def _GetSoapHeader(self, emailAddress):
         # This should only need to be called once to findMode the header that will be used in the XML request from now on
         if emailAddress is None:
-            xmlAccount = """<t:RequestServerVersion Version="Exchange2013" />"""
+            xmlAccount = """<t:RequestServerVersion Version="{}" />""".format(EXCHANGE_VERSION)
         else:
             # replace = '<t:PrincipalName>{0}</t:PrincipalName>'.format(emailAddress)
             # replace = '<t:SID>{0}</t:SID>'.format(emailAddress)
@@ -459,12 +462,12 @@ class Exchange:
 
             # more info on impersonation at this link: https://docs.microsoft.com/en-us/exchange/client-developer/exchange-web-services/how-to-add-appointments-by-using-exchange-impersonation
 
-            xmlAccount = """<t:RequestServerVersion Version="Exchange2013" />
+            xmlAccount = """<t:RequestServerVersion Version="{1}" />
                             <ExchangeImpersonation>
                                 <ConnectingSID>
                                    {0}
                                 </ConnectingSID>
-                            </ExchangeImpersonation>""".format(replace)
+                            </ExchangeImpersonation>""".format(replace, EXCHANGE_VERSION)
         return xmlAccount
 
     def _UpdateStartEndOfWeek(self):
@@ -507,8 +510,7 @@ class Exchange:
                           </t:Mailbox>
                         </t:DistinguishedFolderId>'''.format(self._impersonation)
         else:
-            distinguishedFolderID='<t:DistinguishedFolderId Id="calendar" />'
-
+            distinguishedFolderID = '<t:DistinguishedFolderId Id="calendar" />'
 
         xmlbody = """<?xml version="1.0" encoding="utf-8"?>
                     <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -1028,7 +1030,7 @@ class Exchange:
                                   <t:FieldURI FieldURI="calendar:End" />
                                   <t:CalendarItem>
                                     <t:End>{3}</t:End>
-                                    <t:EndTimeZone>{3}</t:EndTimeZone>
+                                    <t:MeetingTimeZone TimeZoneName="{4}" />
                                   </t:CalendarItem>
                                 </t:SetItemField>
                               </t:Updates>
