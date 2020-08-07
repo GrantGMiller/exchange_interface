@@ -49,9 +49,18 @@ exchange = exchange_interface_2x0.EWS(
     # password=exchange_credentials.password,
     # impersonation='rnchallwaysignage1@extron.com',
 
-    username=exchange_credentials.username,
-    password=exchange_credentials.password,
-    impersonation='usa-conf-pm2@extron.com',
+    # username=exchange_credentials.username,
+    # password=exchange_credentials.password,
+    # impersonation='usa-conf-pm2@extron.com',
+
+    # username=exchange_credentials.na_sa_username,
+    # password=exchange_credentials.na_sa_password,
+    # impersonation=exchange_credentials.a120,
+
+    #Lipman Brothers
+    username='afactor@lipmanbrothers.com',
+    impersonation='rm109@lipmanbrothers.com',
+    password='DoveFox07',
 )
 
 

@@ -7,10 +7,12 @@ import urllib.request, re
 from base64 import b64encode, b64decode
 import datetime
 import time
-import requests
-import xml
+try:
+    import requests
+except:
+    import gs_requests as requests
 
-DEBUG = True
+DEBUG = False
 oldPrint = print
 if not DEBUG:
     print = lambda *a, **k: None
