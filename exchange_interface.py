@@ -79,16 +79,16 @@ class EWS(_BaseCalendar):
             thisMachineTimezoneName = 'Central Standard Time'
 
         self._myTimezoneName = myTimezoneName or thisMachineTimezoneName
-        print('myTimezoneName=', self._myTimezoneName)
+        if self._debug: print('myTimezoneName=', self._myTimezoneName)
 
         self._session = requests.session()
 
         self._session.headers['Content-Type'] = 'text/xml'
 
-        if authType == 'Basic':
+        if callable(oauthCallback) or authType == 'Oauth':
+            self.authType = authType = 'Oauth'
+        elif authType == 'Basic':
             self._session.auth = requests.auth.HTTPBasicAuth(self._username, self._password)
-        elif authType == 'Oauth':
-            pass  # we will put the accessToken into each DoRequest
         else:
             raise TypeError('Unknown Authorization Type')
 
@@ -195,7 +195,7 @@ class EWS(_BaseCalendar):
             soapBody=soapBody,
         )
 
-        print('xml=', xml)
+        if self._debug: print('xml=', xml)
         if self._serverURL:
             url = self._serverURL + '/EWS/exchange.asmx'
         else:
@@ -204,33 +204,33 @@ class EWS(_BaseCalendar):
         if self._authType == 'Oauth':
             self._session.headers['authorization'] = 'Bearer {token}'.format(token=self._oauthCallback())
 
-        print('session.headers=', self._session.headers)
+        if self._debug: print('session.headers=', self._session.headers)
         resp = self._session.request(
             method='POST',
             url=url,
             data=xml,
             verify=self._verifyCerts,
         )
-        print('resp.status_code=', resp.status_code)
-        print('resp.reason=', resp.reason)
-        print('resp.text=', resp.text)
+        if self._debug: print('resp.status_code=', resp.status_code)
+        if self._debug: print('resp.reason=', resp.reason)
+        if self._debug: print('resp.text=', resp.text)
 
         if resp.ok and RE_ERROR_CLASS.search(resp.text) is None:
             self._NewConnectionStatus('Connected')
         else:
             for match in RE_ERROR_MESSAGE.finditer(resp.text):
-                print('Error Message:', match.group(1))
+                if self._debug: print('Error Message:', match.group(1))
             self._NewConnectionStatus('Disconnected')
 
             if 'The account does not have permission to impersonate the requested user.' in resp.text:
                 if self._useImpersonationIfAvailable is True:
-                    print('Switching impersonation mode')
+                    if self._debug: print('Switching impersonation mode')
 
                     self._useImpersonationIfAvailable = not self._useImpersonationIfAvailable
                     self._useDistinguishedFolderMailbox = not self._useDistinguishedFolderMailbox
 
-                    print('self._useImpersonationIfAvailable=', self._useImpersonationIfAvailable)
-                    print('self._useDistinguishedFolderMailbox=', self._useDistinguishedFolderMailbox)
+                    if self._debug: print('self._useImpersonationIfAvailable=', self._useImpersonationIfAvailable)
+                    if self._debug: print('self._useDistinguishedFolderMailbox=', self._useDistinguishedFolderMailbox)
 
         return resp
 
@@ -290,8 +290,14 @@ class EWS(_BaseCalendar):
             parentFolder=parentFolder,
         )
         resp = self._DoRequest(soapBody)
-        calItems = self._CreateCalendarItemsFromResponse(resp.text)
-        self.RegisterCalendarItems(calItems=calItems, startDT=startDT, endDT=endDT)
+        if resp.ok:
+            calItems = self._CreateCalendarItemsFromResponse(resp.text)
+            self.RegisterCalendarItems(calItems=calItems, startDT=startDT, endDT=endDT)
+        else:
+            if 'ErrorImpersonateUserDenied' in resp.text:
+                # try again
+                return self.UpdateCalendar(calendar, startDT, endDT)
+        return resp
 
     def _CreateCalendarItemsFromResponse(self, responseString):
         '''
@@ -301,7 +307,7 @@ class EWS(_BaseCalendar):
         '''
         ret = []
         for matchCalItem in RE_CAL_ITEM.finditer(responseString):
-            print('matchCalItem=', matchCalItem)
+            if self._debug: print('matchCalItem=', matchCalItem)
             # go thru the resposne and find any CalendarItems.
             # parse their data and findMode CalendarItem objects
             # store CalendarItem objects in self
@@ -320,7 +326,7 @@ class EWS(_BaseCalendar):
 
             bodyMatch = RE_HTML_BODY.search(matchCalItem.group(0))
             if bodyMatch:
-                print('bodyMatch=', bodyMatch)
+                if self._debug: print('bodyMatch=', bodyMatch)
                 data['Body'] = bodyMatch.group(1)
 
             res = RE_HAS_ATTACHMENTS.search(matchCalItem.group(0)).group(1)
@@ -398,13 +404,13 @@ class EWS(_BaseCalendar):
 
         if newStartDT is not None:
             timeString = ConvertDatetimeToTimeString(
-                newStartDT.astimezone(datetime.timezone.utc)
+                newStartDT
             )
             props['Start'] = timeString
 
         if newEndDT is not None:
             timeString = ConvertDatetimeToTimeString(
-                newEndDT.astimezone(datetime.timezone.utc)
+                newEndDT
             )
             props['End'] = timeString
 
@@ -437,7 +443,7 @@ class EWS(_BaseCalendar):
             self._DoRequest(soapBody)
 
     def ChangeEventBody(self, calItem, newBody):
-        print('ChangeEventBody(', calItem, newBody)
+        if self._debug: print('ChangeEventBody(', calItem, newBody)
 
         soapBody = """
             <m:UpdateItem MessageDisposition="SaveOnly" ConflictResolution="AlwaysOverwrite" SendMeetingInvitationsOrCancellations="SendToNone">
@@ -535,6 +541,6 @@ if __name__ == '__main__':
         print('events=', events)
         for event in events:
             if 'Test Subject' in event.Get('Subject'):
-                ews.ChangeEventTime(event, newEndDT=datetime.datetime.now())
+                # ews.ChangeEventTime(event, newEndDT=datetime.datetime.now())
                 pass
         time.sleep(10)
