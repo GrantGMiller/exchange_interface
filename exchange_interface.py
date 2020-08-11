@@ -439,13 +439,13 @@ class EWS(_BaseCalendar):
     def ChangeEventBody(self, calItem, newBody):
         print('ChangeEventBody(', calItem, newBody)
 
-        soapBody = f"""
+        soapBody = """
             <m:UpdateItem MessageDisposition="SaveOnly" ConflictResolution="AlwaysOverwrite" SendMeetingInvitationsOrCancellations="SendToNone">
               <m:ItemChanges>
                 <t:ItemChange>
                   <t:ItemId 
-                    Id="{calItem.Get('ItemId')}"
-                    ChangeKey="{calItem.Get('ChangeKey')}" 
+                    Id="{itemID}"
+                    ChangeKey="{changeKey}" 
                     />
                   <t:Updates>
                     <t:SetItemField>
@@ -459,20 +459,27 @@ class EWS(_BaseCalendar):
                 </t:ItemChange>
               </m:ItemChanges>
             </m:UpdateItem>
-            """
+            """.format(
+            itemID=calItem.Get('ItemId'),
+            changeKey=calItem.Get('ChangeKey'),
+            newBody=newBody,
+        )
         resp = self._DoRequest(soapBody)
 
     def DeleteEvent(self, calItem):
-        soapBody = f"""
+        soapBody = """
                 <m:DeleteItem DeleteType="HardDelete" SendMeetingCancellations="SendToNone">
                   <m:ItemIds>
                     <t:ItemId 
-                        Id="{calItem.Get('ItemId')}"
-                        ChangeKey="{calItem.Get('ChangeKey')}" 
+                        Id="{itemID}"
+                        ChangeKey="{changeKey}" 
                     />
                   </m:ItemIds>
                 </m:DeleteItem>
-            """
+            """.format(
+            itemID=calItem.Get('ItemId'),
+            changeKey=calItem.Get('ChangeKey'),
+        )
         resp = self._DoRequest(soapBody)
 
 
