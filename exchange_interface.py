@@ -299,7 +299,8 @@ class EWS(_BaseCalendar):
             self.RegisterCalendarItems(calItems=calItems, startDT=startDT, endDT=endDT)
         else:
             if 'ErrorImpersonateUserDenied' in resp.text:
-                print('Impersonation Error. Trying again with delegate access.')
+                if self._debug:
+                    print('Impersonation Error. Trying again with delegate access.')
                 return self.UpdateCalendar(calendar, startDT, endDT)
         return resp
 
