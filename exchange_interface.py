@@ -5,11 +5,13 @@ All datetimes that are passed to/from this module are in the system local time.
 import datetime
 import re
 import time
-
+from extronlib.system import ProgramLog
 try:
     import gs_requests as requests
-except:
+except Exception as e:
+    ProgramLog(str(e))
     import requests
+
 from calendar_base import (
     _BaseCalendar,
     _CalendarItem,
@@ -91,7 +93,7 @@ class EWS(_BaseCalendar):
             self._session.auth = requests.auth.HTTPBasicAuth(self._username, self._password)
         else:
             raise TypeError('Unknown Authorization Type')
-
+        print('headers=', self._session.headers)
         self._useImpersonationIfAvailable = True
         self._useDistinguishedFolderMailbox = False
 
@@ -204,7 +206,9 @@ class EWS(_BaseCalendar):
         if self._authType == 'Oauth':
             self._session.headers['authorization'] = 'Bearer {token}'.format(token=self._oauthCallback())
 
-        if self._debug: print('session.headers=', self._session.headers)
+        if self._debug:
+            print('209 session.headers=', self._session.headers)
+
         resp = self._session.request(
             method='POST',
             url=url,
@@ -295,7 +299,7 @@ class EWS(_BaseCalendar):
             self.RegisterCalendarItems(calItems=calItems, startDT=startDT, endDT=endDT)
         else:
             if 'ErrorImpersonateUserDenied' in resp.text:
-                # try again
+                print('Impersonation Error. Trying again with delegate access.')
                 return self.UpdateCalendar(calendar, startDT, endDT)
         return resp
 
@@ -543,4 +547,5 @@ if __name__ == '__main__':
             if 'Test Subject' in event.Get('Subject'):
                 # ews.ChangeEventTime(event, newEndDT=datetime.datetime.now())
                 pass
+        break
         time.sleep(10)

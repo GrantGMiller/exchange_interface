@@ -4,6 +4,7 @@
     <mapping directory="" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/../aes-tools" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/../extronlib-clone" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../gs_requests" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/../oAuth_tools_2" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/../persistant-variables" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/../tcp-connection-handler" vcs="Git" />

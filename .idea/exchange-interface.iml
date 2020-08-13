@@ -10,6 +10,8 @@
     <orderEntry type="module" module-name="aes-tools" />
     <orderEntry type="module" module-name="extronlib-clone" />
     <orderEntry type="module" module-name="connection-handler" />
+    <orderEntry type="module" module-name="gs_requests" />
+    <orderEntry type="module" module-name="extronlib-clone" />
   </component>
   <component name="PackageRequirementsSettings">
     <option name="requirementsPath" value="" />
