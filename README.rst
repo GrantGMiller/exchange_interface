@@ -38,5 +38,36 @@ Example Script
         endDT=datetime.datetime.now() + datetime.timedelta(hours=1),
         )
 
+Service Accounts
+==============
 
+::
+
+    import requests
+    from exchange_interface import EWS
+
+    ews = EWS(
+        username='serviceAccount@email.com',
+        password='SuperSecretPassword',# the service account password
+        impersonation='roomAccount@email.com'
+    )
+
+Oauth
+==============
+
+::
+
+    import requests
+    from exchange_interface import EWS
+
+    def GetAccessToken():
+        # do the oauth magic here
+        # see https://bitbucket.org/gmiller_extron/oauth_tools/src/virtual_keyboard/
+        return 'theOauthToken'
+
+    ews = EWS(
+        username='serviceAccount@email.com',
+        oauthCallback=GetAccessToken, # this will becalled before each HTTP request is sent
+        impersonation='roomAccount@email.com'
+    )
 
