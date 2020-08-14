@@ -93,7 +93,6 @@ class EWS(_BaseCalendar):
             self._session.auth = requests.auth.HTTPBasicAuth(self._username, self._password)
         else:
             raise TypeError('Unknown Authorization Type')
-        print('headers=', self._session.headers)
         self._useImpersonationIfAvailable = True
         self._useDistinguishedFolderMailbox = False
 
