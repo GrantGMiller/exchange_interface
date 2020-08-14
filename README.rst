@@ -1,4 +1,4 @@
-Extron Global Scripter allows access to O365 accounts.
+This module allows access to Microsoft Office 365 accounts.
 
 Example Script
 ==============
@@ -10,8 +10,8 @@ Example Script
     import datetime
 
     ews = EWS(
-        username='rf_a105@extrondemo.com',
-        password='Extron123!',
+        username='me@email.com',
+        password='SuperSecretPassword',
     )
     ews.Connected = lambda _, state: print('EWS', state)
     ews.Disconnected = lambda _, state: print('EWS', state)
