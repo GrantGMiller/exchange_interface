@@ -89,7 +89,7 @@ class EWS(_BaseCalendar):
         self._session.headers['Content-Type'] = 'text/xml'
 
         if callable(oauthCallback) or authType == 'Oauth':
-            self.authType = authType = 'Oauth'
+            self._authType = authType = 'Oauth'
         elif authType == 'Basic':
             self._session.auth = requests.auth.HTTPBasicAuth(self._username, self._password)
         else:
