@@ -6,6 +6,7 @@ import datetime
 import re
 import time
 from extronlib.system import ProgramLog
+
 try:
     import gs_requests as requests
 except Exception as e:
@@ -95,6 +96,22 @@ class EWS(_BaseCalendar):
             raise TypeError('Unknown Authorization Type')
         self._useImpersonationIfAvailable = True
         self._useDistinguishedFolderMailbox = False
+
+    def __str__(self):
+        if self._oauthCallback:
+            return '<EWS: state={}, impersonation={}, auth={}, oauthCallback={}>'.format(
+                self._connectionStatus,
+                self._impersonation,
+                self._authType,
+                self._oauthCallback,
+            )
+        else:
+            return '<EWS: state={}, username={}, impersonation={}, auth={}>'.format(
+                self._connectionStatus,
+                self._username,
+                self._impersonation,
+                self._authType
+            )
 
     @property
     def Impersonation(self):

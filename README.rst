@@ -39,7 +39,7 @@ Example Script
         )
 
 Service Accounts
-==============
+================
 
 ::
 
@@ -48,7 +48,7 @@ Service Accounts
 
     ews = EWS(
         username='serviceAccount@email.com',
-        password='SuperSecretPassword',# the service account password
+        password='SuperSecretPassword', # the service account password
         impersonation='roomAccount@email.com'
     )
 
@@ -67,7 +67,7 @@ Oauth
 
     ews = EWS(
         username='serviceAccount@email.com',
-        oauthCallback=GetAccessToken, # this will becalled before each HTTP request is sent
+        oauthCallback=GetAccessToken, # this will be called before each HTTP request is sent
         impersonation='roomAccount@email.com'
     )
 
