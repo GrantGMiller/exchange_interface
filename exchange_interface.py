@@ -5,12 +5,12 @@ All datetimes that are passed to/from this module are in the system local time.
 import datetime
 import re
 import time
-from extronlib.system import ProgramLog
 
 try:
+    from extronlib.system import ProgramLog
     import gs_requests as requests
 except Exception as e:
-    ProgramLog(str(e))
+    print(str(e))
     import requests
 
 from calendar_base import (
@@ -418,6 +418,8 @@ class EWS(_BaseCalendar):
         if 'ErrorImpersonateUserDenied' in resp.text:
             # try again
             self.CreateCalendarEvent(subject, body, startDT, endDT)
+
+
 
     def ChangeEventTime(self, calItem, newStartDT=None, newEndDT=None):
 
