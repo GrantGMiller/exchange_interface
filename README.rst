@@ -1,4 +1,5 @@
 This module allows access to Microsoft Office 365 accounts.
+It allows for personal, delegate, and service accounts.
 
 Install
 =======
