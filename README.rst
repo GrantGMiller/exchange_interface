@@ -1,5 +1,12 @@
 This module allows access to Microsoft Office 365 accounts.
 
+Install
+=======
+
+::
+
+    pip install exchange_interface
+
 Example Script
 ==============
 
