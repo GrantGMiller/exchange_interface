@@ -1,8 +1,0 @@
-Explicit Delegate Access:
-https://docs.microsoft.com/en-us/exchange/client-developer/exchange-web-services/delegate-access-and-ews-in-exchange
-
-Forum where people are experiencing the same issue (cross region service accounts)
-https://social.msdn.microsoft.com/Forums/office/en-US/cf119d33-d8a8-4941-a4a5-11ecf7d3b3ee/impersonation-again
-
-How to create service account
-https://www.sharepointsapiens.com/blog/how-to-configure-a-service-account-in-office-365/

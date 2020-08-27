@@ -5,14 +5,7 @@ All datetimes that are passed to/from this module are in the system local time.
 import datetime
 import re
 import time
-
-try:
-    from extronlib.system import ProgramLog
-    import gs_requests as requests
-except Exception as e:
-    print(str(e))
-    import requests
-
+import requests
 from calendar_base import (
     _BaseCalendar,
     _CalendarItem,
@@ -419,8 +412,6 @@ class EWS(_BaseCalendar):
             # try again
             self.CreateCalendarEvent(subject, body, startDT, endDT)
 
-
-
     def ChangeEventTime(self, calItem, newStartDT=None, newEndDT=None):
 
         props = {}
@@ -516,33 +507,9 @@ if __name__ == '__main__':
     import creds
 
     ews = EWS(
-
-        # gm has ApplicationImpersonation
-        # username='gm_service_account@extrondemo.com',
-        # impersonation='rf_a120@extrondemo.com',
-        # password='Extron2500',
-        # debug=True,
-
-        # username='rf_a101@extrondemo.com',
-        # password='Extron123!',
-
-        # username='gm_service_account@extrondemo.com',
-        # password='Extron1025',
-
-        # username='impersonation-onprem@extron.com',
-        # impersonation='Test-pm4@extron.com',
-        # password='Extron1025',
-
         username=creds.username,
         password=creds.password,
-        impersonation='rnchallwaysignage1@extron.com',
-        debug=True,
-
-        # Covestro mock up
-        # username='rf_covestro@extrondemo.com',
-        # impersonation='rf_a112@extrondemo.com',
-        # password='Extron123!',
-
+        impersonation=creds.hallway1,
     )
 
     ews.Connected = lambda _, state: print('EWS', state)
@@ -560,11 +527,5 @@ if __name__ == '__main__':
 
     while True:
         ews.UpdateCalendar()
-        events = ews.GetNowCalItems()
-        print('events=', events)
-        for event in events:
-            if 'Test Subject' in event.Get('Subject'):
-                # ews.ChangeEventTime(event, newEndDT=datetime.datetime.now())
-                pass
-        break
-        time.sleep(10)
+
+        time.sleep(60)

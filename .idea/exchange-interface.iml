@@ -4,14 +4,7 @@
     <content url="file://$MODULE_DIR$" />
     <orderEntry type="jdk" jdkName="Pipenv (exchange-interface)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
-    <orderEntry type="module" module-name="calendar_base" />
-    <orderEntry type="module" module-name="persistant-variables" />
     <orderEntry type="module" module-name="oAuth_tools_2" />
-    <orderEntry type="module" module-name="aes-tools" />
-    <orderEntry type="module" module-name="extronlib-clone" />
-    <orderEntry type="module" module-name="connection-handler" />
-    <orderEntry type="module" module-name="gs_requests" />
-    <orderEntry type="module" module-name="extronlib-clone" />
   </component>
   <component name="PackageRequirementsSettings">
     <option name="requirementsPath" value="" />

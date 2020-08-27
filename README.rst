@@ -62,7 +62,6 @@ Oauth
 
     def GetAccessToken():
         # do the oauth magic here
-        # see https://bitbucket.org/gmiller_extron/oauth_tools/src/virtual_keyboard/
         return 'theOauthToken'
 
     ews = EWS(
