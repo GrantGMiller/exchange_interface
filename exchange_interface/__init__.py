@@ -38,6 +38,7 @@ RE_HTML_BODY = re.compile('<t:Body BodyType="HTML">([\w\W]*)</t:Body>', re.IGNOR
 RE_EMAIL_ADDRESS = re.compile('.*?\@.*?\..*?')
 
 RE_ERROR_CLASS = re.compile('ResponseClass="Error"', re.IGNORECASE)
+
 RE_ERROR_MESSAGE = re.compile('<m:MessageText>([\w\W]*)</m:MessageText>')
 
 
@@ -65,6 +66,7 @@ class EWS(_BaseCalendar):
         self._apiVersion = apiVersion
         self._verifyCerts = verifyCerts
         self._debug = debug
+        self.errorMessage = ''
 
         thisMachineTimezoneName = time.tzname[0]
         if thisMachineTimezoneName == 'EST':
@@ -231,11 +233,12 @@ class EWS(_BaseCalendar):
         if resp.ok and RE_ERROR_CLASS.search(resp.text) is None:
             self._NewConnectionStatus('Connected')
         else:
-            errorMessage = 'Disconnected'
+            self.errorMessage = 'EWS Error: '
             for match in RE_ERROR_MESSAGE.finditer(resp.text):
-                if self._debug: print('Error Message:', match.group(1))
-                errorMessage += match.group(1)
-            self._NewConnectionStatus(errorMessage)
+                if self._debug:
+                    print('Error Message:', match.group(1))
+                self.errorMessage += match.group(1) + ', '
+            self._NewConnectionStatus('Disconnected')
 
             if 'The account does not have permission to impersonate the requested user.' in resp.text:
                 if self._useImpersonationIfAvailable is True:
@@ -313,6 +316,7 @@ class EWS(_BaseCalendar):
                 if self._debug:
                     print('Impersonation Error. Trying again with delegate access.')
                 return self.UpdateCalendar(calendar, startDT, endDT)
+            self.errorMessage = 'EWS Error {}: {}'.format(resp.status_code, resp.reason)
         return resp
 
     def _CreateCalendarItemsFromResponse(self, responseString):
