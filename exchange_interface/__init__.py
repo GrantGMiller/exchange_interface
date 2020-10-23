@@ -231,9 +231,11 @@ class EWS(_BaseCalendar):
         if resp.ok and RE_ERROR_CLASS.search(resp.text) is None:
             self._NewConnectionStatus('Connected')
         else:
+            errorMessage = 'Disconnected'
             for match in RE_ERROR_MESSAGE.finditer(resp.text):
                 if self._debug: print('Error Message:', match.group(1))
-            self._NewConnectionStatus('Disconnected')
+                errorMessage += match.group(1)
+            self._NewConnectionStatus(errorMessage)
 
             if 'The account does not have permission to impersonate the requested user.' in resp.text:
                 if self._useImpersonationIfAvailable is True:
@@ -509,7 +511,8 @@ if __name__ == '__main__':
     ews = EWS(
         username=creds.username,
         password=creds.password,
-        impersonation=creds.hallway1,
+        impersonation=creds.impersonation,
+        debug=True,
     )
 
     ews.Connected = lambda _, state: print('EWS', state)
@@ -528,4 +531,4 @@ if __name__ == '__main__':
     while True:
         ews.UpdateCalendar()
 
-        time.sleep(60)
+        time.sleep(10)
