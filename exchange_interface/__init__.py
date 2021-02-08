@@ -3,6 +3,7 @@ All datetimes that are passed to/from this module are in the system local time.
 
 '''
 import datetime
+import json
 import re
 import time
 import requests
@@ -41,6 +42,10 @@ RE_ERROR_CLASS = re.compile('ResponseClass="Error"', re.IGNORECASE)
 
 RE_ERROR_MESSAGE = re.compile('<m:MessageText>([\w\W]*)</m:MessageText>')
 
+RE_ATTENDEE = re.compile('<t:Attendee>(.+?)</t:Attendee>')
+RE_ATTENDEE_NAME = re.compile('<t:Name>([\w\W]*)</t:Name>')
+RE_ATTENDEE_RESPONSE = re.compile('<t:ResponseType>([\w\W]*)</t:ResponseType>')
+
 
 class EWS(_BaseCalendar):
     def __init__(
@@ -55,8 +60,10 @@ class EWS(_BaseCalendar):
             apiVersion='Exchange2007_SP1',  # TLS uses "Exchange2007_SP1"
             verifyCerts=True,
             debug=False,
+            GCC=False,
     ):
         super().__init__()
+        self.GCC = GCC
         self._username = username
         self._password = password
         self._impersonation = impersonation
@@ -82,13 +89,14 @@ class EWS(_BaseCalendar):
         self._session = requests.session()
 
         self._session.headers['Content-Type'] = 'text/xml'
-
-        if callable(oauthCallback) or authType == 'Oauth':
+        print('86 self._oauthCallback=', self._oauthCallback)
+        if callable(self._oauthCallback) or authType == 'Oauth':
             self._authType = authType = 'Oauth'
         elif authType == 'Basic':
             self._session.auth = requests.auth.HTTPBasicAuth(self._username, self._password)
         else:
             raise TypeError('Unknown Authorization Type')
+        print('93 self._authType =', self._authType)
         self._useImpersonationIfAvailable = True
         self._useDistinguishedFolderMailbox = False
 
@@ -136,7 +144,7 @@ class EWS(_BaseCalendar):
                     <t:FieldURI FieldURI="item:Subject" />
                     <t:FieldURI FieldURI="calendar:Start" />
                     <t:FieldURI FieldURI="calendar:End" />
-                    <t:FieldURI FieldURI="item:Body" />
+                    <t:FieldURI FieldURI="item:Body BodyType="HTML"" />
                     <t:FieldURI FieldURI="calendar:Organizer" />
                     <t:FieldURI FieldURI="calendar:RequiredAttendees" />
                     <t:FieldURI FieldURI="calendar:OptionalAttendees" />
@@ -159,6 +167,56 @@ class EWS(_BaseCalendar):
             parentFolder=parentFolder,
         )
         self._DoRequest(soapBody)
+
+    def GetItem(self, item):
+        # based on https://docs.microsoft.com/en-us/exchange/client-developer/web-service-reference/additionalproperties
+        print('GetItem(ID=', item)
+        if self._useDistinguishedFolderMailbox:
+            parentFolder = '''
+                <t:DistinguishedFolderId Id="calendar">
+                    <t:Mailbox>
+                        <t:EmailAddress>{impersonation}</t:EmailAddress>
+                    </t:Mailbox>
+                </t:DistinguishedFolderId>
+            '''.format(
+                impersonation=self._impersonation
+            )
+        else:
+            parentFolder = '''
+                <t:DistinguishedFolderId Id="calendar"/>
+            '''
+
+        body = f'''
+            <m:GetItem>
+              <m:ItemShape>
+                <t:BaseShape>IdOnly</t:BaseShape>
+                 <t:AdditionalProperties>
+                  <t:FieldURI FieldURI="calendar:RequiredAttendees"/>
+                </t:AdditionalProperties>
+              </m:ItemShape>
+                <m:ParentFolderIds>
+                     {parentFolder}
+                </m:ParentFolderIds>
+              <m:ItemIds>
+                <t:ItemId 
+                    Id="{item.Get('ItemId')}" 
+                    ChangeKey="{item.Get('ChangeKey')}"
+                />
+              </m:ItemIds>
+            </m:GetItem>
+        '''
+        resp = self._DoRequest(body)
+        for attendeeMatch in RE_ATTENDEE.finditer(resp.text):
+            matchResponse = RE_ATTENDEE_RESPONSE.search(attendeeMatch.group(0))
+            matchName = RE_ATTENDEE_NAME.search(attendeeMatch.group(0))
+            if matchResponse and matchName:
+                itemAttendees = item.Get('Attendees')
+                if not itemAttendees:
+                    itemAttendees = {}
+                itemAttendees[matchName.group(1)] = matchResponse.group(1)
+                item.AddData('Attendees', itemAttendees)
+
+        print('219 item.Get("Attendees")=', item.Get('Attendees'))
 
     def _DoRequest(self, soapBody):
         # API_VERSION = 'Exchange2013'
@@ -212,13 +270,17 @@ class EWS(_BaseCalendar):
         if self._serverURL:
             url = self._serverURL + '/EWS/exchange.asmx'
         else:
-            url = 'https://outlook.office365.com/EWS/exchange.asmx'
+            if self.GCC:
+                url = 'https://outlook.office365.us/EWS/exchange.asmx'
+            else:
+                url = 'https://outlook.office365.com/EWS/exchange.asmx'
 
         if self._authType == 'Oauth':
             self._session.headers['authorization'] = 'Bearer {token}'.format(token=self._oauthCallback())
 
         if self._debug:
-            print('209 session.headers=', self._session.headers)
+            for k, v in self._session.headers.items():
+                print('header:', k, '=', v if len(v) < 25 else v[:25] + '...')
 
         resp = self._session.request(
             method='POST',
@@ -226,9 +288,10 @@ class EWS(_BaseCalendar):
             data=xml,
             verify=self._verifyCerts,
         )
-        if self._debug: print('resp.status_code=', resp.status_code)
-        if self._debug: print('resp.reason=', resp.reason)
-        if self._debug: print('resp.text=', resp.text)
+        if self._debug:
+            print('resp.status_code=', resp.status_code)
+            print('resp.reason=', resp.reason, '!' * 100 if not resp.ok else '')
+            print('resp.text=', resp.text)
 
         if resp.ok and RE_ERROR_CLASS.search(resp.text) is None:
             self._NewConnectionStatus('Connected')
@@ -238,19 +301,28 @@ class EWS(_BaseCalendar):
                 if self._debug:
                     print('Error Message:', match.group(1))
                 self.errorMessage += match.group(1) + ', '
+
             self._NewConnectionStatus('Disconnected')
 
             if 'The account does not have permission to impersonate the requested user.' in resp.text:
                 if self._useImpersonationIfAvailable is True:
-                    if self._debug: print('Switching impersonation mode')
+                    if self._debug:
+                        print('Switching impersonation mode')
 
-                    self._useImpersonationIfAvailable = not self._useImpersonationIfAvailable
-                    self._useDistinguishedFolderMailbox = not self._useDistinguishedFolderMailbox
+                    self._ToggleImpersonation()
 
-                    if self._debug: print('self._useImpersonationIfAvailable=', self._useImpersonationIfAvailable)
-                    if self._debug: print('self._useDistinguishedFolderMailbox=', self._useDistinguishedFolderMailbox)
+            elif not resp.ok:
+                self._ToggleImpersonation()
+
+            if self._debug:
+                print('self._useImpersonationIfAvailable=', self._useImpersonationIfAvailable)
+                print('self._useDistinguishedFolderMailbox=', self._useDistinguishedFolderMailbox)
 
         return resp
+
+    def _ToggleImpersonation(self):
+        self._useImpersonationIfAvailable = not self._useImpersonationIfAvailable
+        self._useDistinguishedFolderMailbox = not self._useDistinguishedFolderMailbox
 
     def UpdateCalendar(self, calendar=None, startDT=None, endDT=None):
         # Default is to return events from (now-1days) to (now+7days)
@@ -281,11 +353,12 @@ class EWS(_BaseCalendar):
             <m:FindItem Traversal="Shallow">
                 <m:ItemShape>
                     <t:BaseShape>IdOnly</t:BaseShape>
+                    <t:BodyType>Best</t:BodyType>
                     <t:AdditionalProperties>
                         <t:FieldURI FieldURI="item:Subject" />
                         <t:FieldURI FieldURI="calendar:Start" />
                         <t:FieldURI FieldURI="calendar:End" />
-                        <t:FieldURI FieldURI="item:Body" />
+                        <t:FieldURI FieldURI="item:Body"/>
                         <t:FieldURI FieldURI="calendar:Organizer" />
                         <t:FieldURI FieldURI="calendar:RequiredAttendees" />
                         <t:FieldURI FieldURI="calendar:OptionalAttendees" />
@@ -363,7 +436,14 @@ class EWS(_BaseCalendar):
             startDT = ConvertTimeStringToDatetime(startTimeString)
             endDT = ConvertTimeStringToDatetime(endTimeString)
 
-            calItem = _CalendarItem(startDT, endDT, data, self)
+            calItem = _CalendarItem(
+                startDT,
+                endDT,
+                data,
+                self
+            )
+
+            self.GetItem(calItem)
             ret.append(calItem)
 
         return ret
@@ -511,12 +591,65 @@ class EWS(_BaseCalendar):
 
 if __name__ == '__main__':
     import creds
+    import oauth_tools
+    import webbrowser
+    import os
+
+    GCC = False
+
+    authManager = oauth_tools.AuthManager(
+        microsoftClientID=creds.clientID,
+        microsoftTenantID=creds.tenantID,
+        debug=True,
+        GCC=GCC,
+    )
+    MY_ID = '3888'
+
+    USER_JSON_PATH = 'users.json'
+
+    # os.remove(USER_JSON_PATH)
+
+    if not os.path.exists(USER_JSON_PATH):
+        open(USER_JSON_PATH, mode='wt').write(json.dumps({}))
+
+    authManager.SaveIncompleteOACallback = lambda ID, data: open('incomplete.json', mode='wt').write(
+        json.dumps({ID: data}, indent=2))
+    authManager.GetIncompleteOACallback = lambda ID: json.loads(open('incomplete.json', mode='rt').read()).get(ID, None)
+
+    authManager.SaveToDBCallback = lambda ID, data: open(USER_JSON_PATH, mode='wt').write(
+        json.dumps({ID: data}, indent=2))
+    authManager.GetFromDBCallback = lambda ID: json.loads(open(USER_JSON_PATH, mode='rt').read()).get(ID, None)
+
+    user = authManager.GetUserByID(MY_ID)
+    print('user=', user)
+    if user is None:
+        d = authManager.CreateNewUser(MY_ID)
+        print('d=', d)
+        webbrowser.open(d['verification_uri'])
+        print('Enter the code', d['user_code'])
+
+        while True:
+            time.sleep(d['interval'])
+            status = authManager.CheckOAStatus(MY_ID)
+            print('status=', status)
+            if status == 'Success':
+                break
+
+        user = authManager.GetUserByID(MY_ID)
+
+    print('578 user=', user)
+
+    print('creds.username=', creds.username)
+    print('creds.password=', '*' * len(creds.password))
+    print('creds.impersonation=', creds.impersonation)
 
     ews = EWS(
         username=creds.username,
         password=creds.password,
         impersonation=creds.impersonation,
         debug=True,
+        oauthCallback=user.GetAccessToken if user else None,
+        GCC=GCC
     )
 
     ews.Connected = lambda _, state: print('EWS', state)
